@@ -7,10 +7,13 @@ const APP = {
 document.getElementById("appVersion").textContent = APP.version;
 
 // Inside the Windows/Mac wrapper the page is opened with ?host=screensaver or ?host=app,
-// and can ask the wrapper to close (window.chrome.webview is WebView2's message channel)
+// and can ask the wrapper to close
 const HOST = new URLSearchParams(location.search).get("host");
 if (HOST) document.body.classList.add("host-" + HOST);
-const tellHost = (message) => window.chrome?.webview?.postMessage(message);
+const tellHost = (message) => {
+  window.chrome?.webview?.postMessage(message);                       // Windows (WebView2)
+  window.webkit?.messageHandlers?.murmuration?.postMessage(message);  // macOS (WKWebView)
+};
 document.getElementById("linkRepo").href = APP.repo;
 document.getElementById("linkIssues").href = APP.repo + "/issues";
 document.getElementById("linkCredits").href = APP.repo + "/blob/main/NOTICE";
