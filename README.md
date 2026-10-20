@@ -64,7 +64,9 @@ For development, `mac/build.sh dev` builds with the Web Inspector enabled and op
 
 Murmuration has two modes.
 
-**Screensaver mode** (the default) is for watching. The globe turns on its own and posts flow in. Move the mouse and an **Explore** button appears for a few seconds (or press **E**).
+**Screensaver mode** (the default) is for watching. The globe turns on its own, nodding south now and then, lit by the sun where it's day right now, and posts flow in.
+
+**Press E to explore** (on a Mac, open the Murmuration app). A quiet "E explore" at the bottom of the screen is the reminder; move the mouse and it becomes an **Explore** button. In the app and in a browser, any click or key with no other job starts exploring too. In the Windows screensaver, any other key or a click elsewhere closes it, as screensavers do.
 
 **Interactive mode** lets you explore:
 
@@ -72,6 +74,7 @@ Murmuration has two modes.
 |---|---|
 | Spin the globe | Drag it |
 | Zoom | Scroll wheel or pinch |
+| See where a post is | Rest the pointer on it in the feed; a pink ripple goes out from its spot |
 | Find a post on the globe | Click it in the feed on the left; the globe turns to it and marks it in pink |
 | Let go of a selected post | Click it again, or press **Esc** |
 | Read earlier posts | Scroll the feed (new posts wait while your pointer is over it) |

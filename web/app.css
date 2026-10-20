@@ -47,13 +47,35 @@ body.interactive #feed {
 .btn.primary { border-color: var(--cyan); color: var(--cyan); }
 .btn.danger { border-color: #f87171; color: #f87171; }
 #toolbar { position: fixed; top: 16px; right: 16px; z-index: 8; display: flex; gap: 8px; }
+/* The explore hint: idle and awake states share one slot and cross-fade */
 #exploreBox {
   position: fixed; left: 50%; bottom: 22px; transform: translateX(-50%); z-index: 8;
-  display: flex; flex-direction: column; align-items: center; gap: 6px;
-  font-size: 11px; color: var(--muted); transition: opacity .6s;
+  display: grid; justify-items: center; align-items: end;
+  font-size: 11px; color: var(--muted);
 }
+#exploreBox > * { grid-area: 1 / 1; transition: opacity .6s; }
+.hint-awake { display: flex; flex-direction: column; align-items: center; gap: 6px; }
+.hint-idle, .hint-app { font-size: 12px; color: var(--ink); opacity: .7; pointer-events: none; white-space: nowrap; }
+.hint-idle kbd { font: inherit; border: 1px solid var(--line); border-radius: 3px; padding: 0 5px; margin-right: 3px; }
+body:not(.idle) .hint-idle, body.idle .hint-awake { opacity: 0; }
 #explore { padding: 8px 20px; font-size: 13px; }
-body.idle #exploreBox { opacity: 0; }
+@media (max-width: 699px) { .hint-idle { display: none; } }
+/* Mac screensaver: exploring happens in the app, so the slot says that and nothing else */
+.hint-app { display: none; }
+body.explore-app .hint-app, body.explore-install .hint-app { display: block; }
+body.explore-app .hint-idle, body.explore-app .hint-awake,
+body.explore-install .hint-idle, body.explore-install .hint-awake { display: none; }
+
+/* Burn-in care: the text that never leaves the screen drifts a pixel at a time, 4px each
+   way, around a square every 10 minutes ("translate" leaves the centring transform alone) */
+@keyframes drift {
+  0% { translate: 0 0; }
+  25% { translate: 4px 0; }
+  50% { translate: 4px 4px; }
+  75% { translate: 0 4px; }
+  100% { translate: 0 0; }
+}
+#brand, #exploreBox { animation: drift 600s steps(4) infinite; }
 /* Only inside the Windows/Mac screensaver */
 body:not(.host-screensaver) .host-ss { display: none !important; }
 #overlay {
@@ -164,3 +186,9 @@ body.idle .fade-idle { opacity: 0; }
   100% { opacity: 0; }
 }
 @keyframes life-stem { 0% { opacity: 0 } 6% { opacity: 1 } 85% { opacity: 1 } 100% { opacity: 0 } }
+
+@media (prefers-reduced-motion: reduce) {
+  #brand, #exploreBox { animation: none; }
+  .fitem { animation-name: appear; }
+  .card { animation-name: life-stem; }
+}
