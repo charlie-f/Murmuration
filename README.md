@@ -50,7 +50,7 @@ Needs macOS 13 or later and Xcode (or just the Command Line Tools: `xcode-select
 2. Double-click `Murmuration.saver` and choose to install it. It appears in **System Settings → Screen Saver**.
 3. Drag `Murmuration.app` into **Applications**.
 
-macOS closes a screensaver as soon as you touch the mouse or keyboard, so on a Mac the screensaver is for watching only, and exploring (spinning the globe, reading earlier posts, the Translation extra) happens in **Murmuration.app**. The screensaver's **Options…** button opens the app. To save power, only the main display runs the live globe; other displays show a still picture.
+macOS closes a screensaver as soon as you touch the mouse or keyboard, so on a Mac the screensaver is for watching only, and exploring (spinning the globe, reading earlier posts, the Translation extra) happens in **Murmuration.app**. The screensaver says so at the bottom of the screen: "To explore, open the Murmuration app" (or "To explore, install the Murmuration app" if it isn't installed yet). The screensaver's **Options…** button opens the app. To save power, only the main display runs the live globe; other displays show a still picture.
 
 The translation extra lives in the app. The screensaver shows posts untranslated and keeps nothing on disk. To remove the app's saved settings and the translation extra, use **Uninstall** in its Translation panel, or delete the `com.github.charlie-f.Murmuration` folders in `~/Library/WebKit` and `~/Library/Caches`.
 
