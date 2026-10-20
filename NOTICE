@@ -24,6 +24,10 @@ into Murmuration.scr)
   windows/LICENSE-WebView2-SDK.txt. The WebView2 Runtime itself is part of
   Windows and is not redistributed.
 
+Apple WebKit and system frameworks (macOS build only)
+  The macOS screensaver and app use the WKWebView, AppKit and ScreenSaver
+  frameworks that are part of macOS. Nothing from them is redistributed.
+
 Transformers.js (used only by the optional translation extra)
   Copyright (c) Hugging Face. Apache License 2.0.
   https://github.com/huggingface/transformers.js
