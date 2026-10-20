@@ -41,26 +41,33 @@ final class WebViewDelegate: NSObject, WKNavigationDelegate, WKUIDelegate, WKScr
     /// Pages the app may open in the viewer's browser; anything else is ignored
     private let externalAllowed = ["https://bsky.app/", WebHost.repo + "/"]
     var onExit: () -> Void = {}
-    var onOpenedLink: () -> Void = {}
 
-    // Stay on our own pages
+    // Stay on our own pages. A link that asks for a new window (target="_blank") arrives here
+    // with no target frame, and opens in the viewer's browser if it's allowed.
     func webView(_ webView: WKWebView, decidePolicyFor action: WKNavigationAction,
                  decisionHandler: @escaping (WKNavigationActionPolicy) -> Void) {
-        let allowed = action.request.url?.absoluteString.hasPrefix(WebHost.origin) ?? false
-        decisionHandler(allowed ? .allow : .cancel)
+        let url = action.request.url
+        if action.targetFrame == nil {
+            openExternal(url)
+            decisionHandler(.cancel)
+            return
+        }
+        decisionHandler(url?.absoluteString.hasPrefix(WebHost.origin) == true ? .allow : .cancel)
     }
 
-    // Links (a post on Bluesky, the project page) open in the viewer's own browser
+    // window.open (a post on Bluesky) also opens in the viewer's browser; never a new web view
     func webView(_ webView: WKWebView, createWebViewWith configuration: WKWebViewConfiguration,
                  for action: WKNavigationAction, windowFeatures: WKWindowFeatures) -> WKWebView? {
-        if let url = action.request.url {
-            let s = url.absoluteString
-            if s == WebHost.repo || externalAllowed.contains(where: { s.hasPrefix($0) }) {
-                NSWorkspace.shared.open(url)
-                onOpenedLink()
-            }
-        }
+        openExternal(action.request.url)
         return nil
+    }
+
+    private func openExternal(_ url: URL?) {
+        guard let url else { return }
+        let s = url.absoluteString
+        if s == WebHost.repo || externalAllowed.contains(where: { s.hasPrefix($0) }) {
+            NSWorkspace.shared.open(url)
+        }
     }
 
     // Runs unattended: if the page's process dies, start it again

@@ -13,11 +13,16 @@ final class MurmurationSaverView: ScreenSaverView {
     private let delegate = WebViewDelegate()
     /// The one view running the page in this process. legacyScreenSaver makes several views,
     /// and on recent macOS the System Settings preview is full size and doesn't say it's a
-    /// preview, so the newest view takes over and any older one stops.
+    /// preview. The newest view runs the page: it takes over from an older one, and an older
+    /// view that starts again later leaves it alone.
     private static weak var live: MurmurationSaverView?
+    private static var made = 0
+    private let serial: Int
     private lazy var sheet = SettingsSheet()
 
     override init?(frame: NSRect, isPreview: Bool) {
+        Self.made += 1
+        serial = Self.made
         super.init(frame: frame, isPreview: isPreview)
         animationTimeInterval = 3600  // nothing to animate natively; the page draws itself
         // legacyScreenSaver keeps running after the screensaver closes, and doesn't always
@@ -39,6 +44,7 @@ final class MurmurationSaverView: ScreenSaverView {
         super.startAnimation()
         guard webView == nil, isMainDisplay,
               let web = Bundle(for: Self.self).resourceURL?.appendingPathComponent("web") else { return }
+        if let live = Self.live, live.serial > serial { return }
         Self.live?.tearDown()
         // Each display and the app keep separate storage anyway; the screensaver needs none
         let view = WebHost.makeWebView(webRoot: web, host: "screensaver", persistent: false, delegate: delegate)
@@ -68,6 +74,7 @@ final class MurmurationSaverView: ScreenSaverView {
         view.configuration.userContentController.removeAllScriptMessageHandlers()
         view.removeFromSuperview()
         webView = nil
+        if Self.live === self { Self.live = nil }
         needsDisplay = true
     }
 
