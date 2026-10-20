@@ -42,6 +42,11 @@ final class MurmurationSaverView: ScreenSaverView {
         Self.live?.tearDown()
         // Each display and the app keep separate storage anyway; the screensaver needs none
         let view = WebHost.makeWebView(webRoot: web, host: "screensaver", persistent: false, delegate: delegate)
+        // macOS hosts the screensaver in a window it reports as covered, and WebKit stops
+        // drawing covered pages. This WebKit setting isn't public, so it's skipped if it's gone.
+        if view.responds(to: NSSelectorFromString("_setWindowOcclusionDetectionEnabled:")) {
+            view.setValue(false, forKey: "windowOcclusionDetectionEnabled")
+        }
         view.frame = bounds
         view.autoresizingMask = [.width, .height]
         addSubview(view)
