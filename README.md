@@ -107,7 +107,7 @@ Murmuration runs unattended, so it leans toward caution:
 |---|---|
 | `jetstream*.bsky.network` | Bluesky's public live stream of posts |
 | `public.api.bsky.app` | Checking moderation labels for posts about to be shown |
-| `cdn.jsdelivr.net` | The globe library and Earth images (and the translation engine, if installed) |
+| `cdn.jsdelivr.net` | The translation engine, only when you install the extra |
 | `huggingface.co` | Translation models, only when you install the extra |
 | `bsky.app` | Only if you click a card to open a post |
 
@@ -119,9 +119,12 @@ There's no tracking, no analytics and no account.
 
 ```
 web/                 The app, shared by every platform
-  index.html         Globe, feed, modes, panels
+  index.html         Page structure and security policy
+  app.js             Globe, feed, modes, panels
+  app.css            Styles
   translator.js      Translation worker (optional extra)
   translate-plan.js  What the translation extra installs
+  vendor/            globe.gl and the Earth images, bundled (with their licenses)
 LICENSE              Apache License 2.0
 NOTICE               Credits and third-party licenses
 ```
@@ -135,7 +138,7 @@ Windows (`.scr`) and macOS (`.saver` + app) wrappers will be added alongside `we
 - [x] Optional on-device translation
 - [ ] Windows screensaver installer
 - [ ] macOS screensaver and companion app (macOS closes screensavers on any input, so interactive mode will open as an app on Mac)
-- [ ] Libraries and images bundled with the app, so nothing loads from a CDN
+- [x] Globe library and images bundled with the app
 
 ## Contributing
 

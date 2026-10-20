@@ -16,6 +16,7 @@ globe.gl and three-globe
   https://github.com/vasturiano/globe.gl
   https://github.com/vasturiano/three-globe
   The Earth and night-sky images come from the three-globe example images.
+  Bundled copies and license files are in web/vendor/.
 
 Transformers.js (used only by the optional translation extra)
   Copyright (c) Hugging Face. Apache License 2.0.
