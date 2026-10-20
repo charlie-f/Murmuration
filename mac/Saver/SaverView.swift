@@ -11,6 +11,10 @@ import WebKit
 final class MurmurationSaverView: ScreenSaverView {
     private var webView: WKWebView?
     private let delegate = WebViewDelegate()
+    /// The one view running the page in this process. legacyScreenSaver makes several views,
+    /// and on recent macOS the System Settings preview is full size and doesn't say it's a
+    /// preview, so the newest view takes over and any older one stops.
+    private static weak var live: MurmurationSaverView?
     private lazy var sheet = SettingsSheet()
 
     override init?(frame: NSRect, isPreview: Bool) {
@@ -27,20 +31,22 @@ final class MurmurationSaverView: ScreenSaverView {
     deinit { DistributedNotificationCenter.default().removeObserver(self) }
 
     private var isMainDisplay: Bool {
-        guard let screen = window?.screen, let main = NSScreen.screens.first else { return false }
+        guard !isPreview, let screen = window?.screen, let main = NSScreen.screens.first else { return false }
         return screen == main
     }
 
     override func startAnimation() {
         super.startAnimation()
-        guard webView == nil, !isPreview, isMainDisplay,
+        guard webView == nil, isMainDisplay,
               let web = Bundle(for: Self.self).resourceURL?.appendingPathComponent("web") else { return }
+        Self.live?.tearDown()
         // Each display and the app keep separate storage anyway; the screensaver needs none
         let view = WebHost.makeWebView(webRoot: web, host: "screensaver", persistent: false, delegate: delegate)
         view.frame = bounds
         view.autoresizingMask = [.width, .height]
         addSubview(view)
         webView = view
+        Self.live = self
     }
 
     override func stopAnimation() {
@@ -56,13 +62,14 @@ final class MurmurationSaverView: ScreenSaverView {
         view.configuration.userContentController.removeAllScriptMessageHandlers()
         view.removeFromSuperview()
         webView = nil
+        needsDisplay = true
     }
 
     // Black, with a still globe in the preview and on other displays
     override func draw(_ rect: NSRect) {
         NSColor.black.setFill()
         bounds.fill()
-        guard webView == nil, isPreview || !isMainDisplay else { return }
+        guard webView == nil, !isMainDisplay else { return }
         let size = min(bounds.width, bounds.height) * 0.6
         let c = NSPoint(x: bounds.midX, y: bounds.midY)
         let globe = NSBezierPath(ovalIn: NSRect(x: c.x - size / 2, y: c.y - size / 2, width: size, height: size))
