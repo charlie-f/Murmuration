@@ -121,19 +121,21 @@ async function runStep(step, parts, src) {
 let queue = []; // [{ id, text, src, tgt, t }]
 let busy = false;
 
+// Every job gets an answer, even a skipped one, so the page can let go of it
+const dropped = (job) => postMessage({ type: "result", id: job.id, text: null });
+
 async function pump() {
   if (busy) return;
   busy = true;
   while (queue.length) {
     // Newest first: what's on screen now matters more than what has scrolled away
     const now = Date.now();
-    queue = queue.filter((q) => now - q.t < 30000);
+    queue = queue.filter((q) => now - q.t < 30000 || (dropped(q), false));
     const job = queue.pop();
     if (!job) break;
     const steps = route(job.src, job.tgt, installed);
-    if (!steps) { postMessage({ type: "result", id: job.id, text: null, error: "no route" }); continue; }
+    if (!steps) { dropped(job); continue; }
     try {
-      const t0 = performance.now();
       let parts = sentences(job.text);
       let lang = job.src;
       for (const step of steps) {
@@ -141,10 +143,9 @@ async function pump() {
         lang = "en";
       }
       const text = parts.filter(Boolean).join(" ");
-      postMessage({ type: "result", id: job.id, text: text || null, ms: Math.round(performance.now() - t0),
-        via: steps.map((s) => s.model).join(" → ") });
-    } catch (err) {
-      postMessage({ type: "result", id: job.id, text: null, error: String(err && err.message || err) });
+      postMessage({ type: "result", id: job.id, text: text || null });
+    } catch {
+      dropped(job);
     }
   }
   busy = false;
@@ -156,13 +157,13 @@ onmessage = (e) => {
     target = m.tgt;
     planned = plan(target) || [];
     installed = new Set(planned.map((p) => p.name));
-    postMessage({ type: "ready", supported: planned.length > 0 });
+    postMessage({ type: "ready" });
     cleanup();
   } else if (m.type === "install") {
     install();
   } else if (m.type === "translate") {
     queue.push({ ...m, t: Date.now() });
-    if (queue.length > 12) queue.shift();
+    if (queue.length > 12) dropped(queue.shift());
     pump();
   }
 };

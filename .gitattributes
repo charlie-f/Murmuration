@@ -1,5 +1,8 @@
 # Same line endings on Windows and Mac
 * text=auto eol=lf
+# Windows batch files need CRLF
+*.bat text eol=crlf
+*.cmd text eol=crlf
 *.png binary
 *.jpg binary
 *.ico binary

@@ -10,3 +10,6 @@ dist/
 build/
 *.scr
 *.saver
+
+# Windows build: fetched SDK
+windows/deps/

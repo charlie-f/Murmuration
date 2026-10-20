@@ -6,7 +6,7 @@ Murmuration is a free, open-source screensaver that shows public [Bluesky](https
 
 It's inspired by the 2007 [Twingly Screensaver](https://Labnol.org/internet/blogging/blogging-screensaver-visualize-blog-stories-twingly-globe/2880/), which did the same for blogs.
 
-> **Status: early prototype.** The web version works today in any modern browser. Installable screensavers for **Windows** and **macOS** are in progress and will be published on the [Releases page](https://github.com/charlie-f/Murmuration/releases).
+> **Status: early prototype.** The web version works in any modern browser, and the **Windows** screensaver builds from source (see below). Ready-made downloads for Windows and **macOS** will be published on the [Releases page](https://github.com/charlie-f/Murmuration/releases).
 
 ---
 
@@ -26,6 +26,21 @@ You need a modern browser (a recent Chrome, Edge, Firefox or Safari) and an inte
    npx serve web
    ```
 3. Open the address it prints (for Python, <http://localhost:8000>) and press **F** for fullscreen.
+
+### Windows screensaver (build from source)
+
+Needs Windows 10 or 11 and [Visual Studio 2022](https://visualstudio.microsoft.com/) (the free Community edition is fine) with the **Desktop development with C++** workload.
+
+1. Run `windows\build.bat`. The first build downloads Microsoft's WebView2 SDK once and checks it against a pinned hash.
+2. Right-click `windows\build\Murmuration.scr` and choose **Install**. Windows opens Screen Saver Settings with Murmuration selected.
+
+The same program also works as an app: double-click `windows\build\Murmuration.exe` to explore the globe in a window. Murmuration uses the Microsoft Edge WebView2 Runtime, which is built into Windows 11 and up-to-date Windows 10.
+
+While the screensaver runs, move the mouse to show the **Explore** button. Press any key or click anywhere else to close it.
+
+Murmuration keeps its files and settings in `%LOCALAPPDATA%\Murmuration`. Delete that folder to remove every trace, including the translation extra.
+
+For development, `windows\build.bat dev` builds and opens the app reading `web\` live, with developer tools enabled.
 
 ---
 
@@ -98,7 +113,8 @@ Murmuration runs unattended, so it leans toward caution:
 - Only **top-level public posts** become cards (no replies).
 - Before a post is shown, it's checked against Bluesky's public moderation labels. Anything labelled, on the post or the account, is skipped.
 - Accounts that asked not to be shown to logged-out viewers are skipped.
-- A multilingual word filter catches adult and spam content that hasn't been labelled yet. It also checks translations.
+- A post is checked 15 seconds after it's written, giving Bluesky's automatic labellers time to act first.
+- A multilingual word filter (English, European languages, Russian, Japanese, Chinese, Korean) and a list of adult-site domains catch content that hasn't been labelled yet, in the text, in links and in link previews. It also checks translations. It errs on the side of hiding things.
 - Nothing is stored: posts live in memory while they're on screen and then they're gone.
 
 **Network connections it makes:**
@@ -125,18 +141,21 @@ web/                 The app, shared by every platform
   translator.js      Translation worker (optional extra)
   translate-plan.js  What the translation extra installs
   vendor/            globe.gl and the Earth images, bundled (with their licenses)
+windows/             Windows screensaver/app (C++ and WebView2); embeds web/ at build time
+  build.bat          Builds build\Murmuration.scr
 LICENSE              Apache License 2.0
 NOTICE               Credits and third-party licenses
 ```
 
-Windows (`.scr`) and macOS (`.saver` + app) wrappers will be added alongside `web/`. They package the same web files, so a change made once reaches both platforms.
+The Windows wrapper (and the macOS one, coming) packages the same `web/` files, so a change made once reaches every platform.
 
 ## Roadmap
 
 - [x] Live globe, feed, language ring, post cards
 - [x] Screensaver and interactive modes
 - [x] Optional on-device translation
-- [ ] Windows screensaver installer
+- [x] Windows screensaver (build from source)
+- [ ] Windows release download (signed)
 - [ ] macOS screensaver and companion app (macOS closes screensavers on any input, so interactive mode will open as an app on Mac)
 - [x] Globe library and images bundled with the app
 

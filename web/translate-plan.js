@@ -24,7 +24,6 @@ const DEDICATED = {
   "ko-en": { mb: 120, label: "Korean" },
   "zh-en": { mb: 119, label: "Chinese" },
 };
-export const ENGINE_MB = 6;
 
 function toEnglishIdeal(src) {
   const code = SRC_CODE[src] || src;

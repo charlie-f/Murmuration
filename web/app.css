@@ -46,13 +46,16 @@ body.interactive #feed {
 .btn:focus-visible { outline: 2px solid var(--cyan); outline-offset: 2px; }
 .btn.primary { border-color: var(--cyan); color: var(--cyan); }
 .btn.danger { border-color: #f87171; color: #f87171; }
-.btn:disabled { opacity: .5; cursor: default; }
 #toolbar { position: fixed; top: 16px; right: 16px; z-index: 8; display: flex; gap: 8px; }
-#explore {
+#exploreBox {
   position: fixed; left: 50%; bottom: 22px; transform: translateX(-50%); z-index: 8;
-  padding: 8px 20px; font-size: 13px; transition: opacity .6s;
+  display: flex; flex-direction: column; align-items: center; gap: 6px;
+  font-size: 11px; color: var(--muted); transition: opacity .6s;
 }
-body.idle #explore { opacity: 0; }
+#explore { padding: 8px 20px; font-size: 13px; }
+body.idle #exploreBox { opacity: 0; }
+/* Only inside the Windows/Mac screensaver */
+body:not(.host-screensaver) .host-ss { display: none !important; }
 #overlay {
   position: fixed; inset: 0; z-index: 20; display: flex; align-items: center; justify-content: center;
   background: rgba(0, 0, 0, .55); padding: 16px; box-sizing: border-box;
@@ -143,9 +146,9 @@ body.idle .fade-idle { opacity: 0; }
 .card {
   position: absolute; left: 0; bottom: 22px; transform: translateX(-50%);
   width: max-content; max-width: 250px;
-  background: var(--panel); border: 1px solid var(--line); border-top: 2px solid currentColor;
+  /* Solid enough to read without a blur, which would be recomputed every frame over the moving globe */
+  background: rgba(8, 12, 20, .82); border: 1px solid var(--line); border-top: 2px solid currentColor;
   border-radius: 4px; padding: 7px 9px 6px;
-  backdrop-filter: blur(4px);
   color: var(--ink); pointer-events: auto; cursor: pointer;
   animation: life 9s forwards;
 }

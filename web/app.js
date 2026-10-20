@@ -5,6 +5,12 @@ const APP = {
   repo: "https://github.com/charlie-f/Murmuration",
 };
 document.getElementById("appVersion").textContent = APP.version;
+
+// Inside the Windows/Mac wrapper the page is opened with ?host=screensaver or ?host=app,
+// and can ask the wrapper to close (window.chrome.webview is WebView2's message channel)
+const HOST = new URLSearchParams(location.search).get("host");
+if (HOST) document.body.classList.add("host-" + HOST);
+const tellHost = (message) => window.chrome?.webview?.postMessage(message);
 document.getElementById("linkRepo").href = APP.repo;
 document.getElementById("linkIssues").href = APP.repo + "/issues";
 document.getElementById("linkCredits").href = APP.repo + "/blob/main/NOTICE";
@@ -171,7 +177,11 @@ function countryFromHandle(handle) {
 // ---------------------------------------------------------------------------
 const AMBER = "255,180,84", CYAN = "95,224,255";
 const IMG = "vendor/";
-const world = new Globe(document.getElementById("globe"), { animateIn: true })
+const world = new Globe(document.getElementById("globe"), {
+  animateIn: true,
+  // Hours of running: prefer the integrated GPU on dual-GPU laptops
+  rendererConfig: { antialias: true, alpha: true, powerPreference: "low-power" },
+})
   .globeImageUrl(IMG + "earth-night.jpg")
   .backgroundImageUrl(IMG + "night-sky.png")
   .atmosphereColor("#4a86d8")
@@ -182,6 +192,7 @@ const world = new Globe(document.getElementById("globe"), { animateIn: true })
   .ringRepeatPeriod((d) => d.period || 5000)
   .ringAltitude(0.003)
   .pointsMerge(true)
+  .pointResolution(4)  // the dots are ~2px; 4 sides look the same as 12 at a third of the geometry
   .pointAltitude(0.004)
   .pointRadius(0.16)
   .pointColor((d) => d.color)
@@ -195,9 +206,8 @@ let rotateWanted = true; // what Space last asked for; selection pauses rotation
 controls.autoRotate = true;
 controls.autoRotateSpeed = 0.35;
 controls.enableDamping = true;
-
-let viewCenter = { lat: 30, lng: -40 };
-setInterval(() => { const p = world.pointOfView(); viewCenter = { lat: p.lat, lng: p.lng }; }, 500);
+// Full 2x pixel density costs 4x the fill for little visible gain on a moving globe
+world.renderer().setPixelRatio(Math.min(window.devicePixelRatio || 1, 1.5));
 
 function angDist(a, b) {
   const r = Math.PI / 180;
@@ -207,22 +217,26 @@ function angDist(a, b) {
 }
 
 // Ripples for every placed post, plus a fading trail of dots.
+// While the page is hidden nothing is drawn, so nothing is queued or rebuilt either.
 let pendingRings = [], rings = [], dots = [];
 setInterval(() => {
   const now = performance.now();
-  rings = rings.filter((r) => now - r.t < 1400).concat(pendingRings);
+  rings = rings.concat(pendingRings).filter((r) => now - r.t < 1400);
   pendingRings = [];
+  if (document.hidden) return;
   world.ringsData(selected ? rings.concat(selected.ring) : rings);
 }, 200);
+// The trail is one merged mesh that globe.gl rebuilds on every update, so update it sparingly
 setInterval(() => {
   const now = performance.now();
   dots = dots.filter((d) => now - d.t < 45000);
+  if (document.hidden) return;
   for (const d of dots) {
     const a = 0.85 * (1 - (now - d.t) / 45000) + 0.1;
     d.color = `rgba(${d.rgb},${a.toFixed(2)})`;
   }
   world.pointsData(dots);
-}, 1000);
+}, 2000);
 
 // ---------------------------------------------------------------------------
 // Stats: posts/sec and a rolling 60-second count per language
@@ -252,7 +266,8 @@ function langCounts() {
 // ---------------------------------------------------------------------------
 const canvas = document.getElementById("ring");
 const ctx = canvas.getContext("2d");
-let ringSlots = []; // [{ key, target, shown }]
+let ringSlots = []; // [{ key, label, target, shown }]
+let ringDirty = true, ringRadius = 0; // repaint only when a bar moves, the ranking changes or the view resizes
 
 // Layout: feed column on the left, globe + ring centred in the space to its right.
 const globeEl = document.getElementById("globe");
@@ -280,6 +295,7 @@ function layout() {
   canvas.width = w * dpr; canvas.height = h * dpr;
   canvas.style.width = w + "px"; canvas.style.height = h + "px";
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  ringDirty = true; // resizing the canvas cleared it
   const pov = world.pointOfView();
   world.pointOfView({ lat: pov.lat, lng: pov.lng, altitude: fitAltitude() });
 }
@@ -290,7 +306,8 @@ layout();
 function rerankRing() {
   const counts = [...langCounts()].filter(([k]) => k !== "und").sort((a, b) => b[1] - a[1]).slice(0, 12);
   const prev = new Map(ringSlots.map((s) => [s.key, s.shown]));
-  ringSlots = counts.map(([key, n]) => ({ key, target: n, shown: prev.get(key) || 0 }));
+  ringSlots = counts.map(([key, n]) => ({ key, label: langName(key), target: n, shown: prev.get(key) || 0 }));
+  ringDirty = true;
 }
 setInterval(rerankRing, 5000);
 setInterval(() => { const c = langCounts(); for (const s of ringSlots) s.target = c.get(s.key) || 0; }, 1000);
@@ -303,21 +320,32 @@ function globeScreenRadius() {
 }
 
 function drawRing() {
+  requestAnimationFrame(drawRing);
+  let moved = false;
+  for (const s of ringSlots) {
+    const d = s.target - s.shown;
+    if (!d) continue;
+    s.shown = Math.abs(d) < 0.05 ? s.target : s.shown + d * 0.08;
+    moved = true;
+  }
+  const r = globeScreenRadius() + 16;
+  if (!moved && !ringDirty && Math.abs(r - ringRadius) < 0.5) return;
+  ringDirty = false;
+  ringRadius = r;
+
   const w = world.width(), h = world.height(), cx = w / 2, cy = h / 2;
   ctx.clearRect(0, 0, w, h);
-  const r = globeScreenRadius() + 16;
   const room = Math.min(w, h) / 2 - r - 8;
   const maxLen = Math.max(18, Math.min(90, room - 55));
   ctx.strokeStyle = "rgba(140,170,210,.16)";
   ctx.lineWidth = 1;
   ctx.beginPath(); ctx.arc(cx, cy, r, 0, Math.PI * 2); ctx.stroke();
-  if (!ringSlots.length) { requestAnimationFrame(drawRing); return; }
+  if (!ringSlots.length) return;
 
   const max = Math.max(1, ...ringSlots.map((s) => s.target));
   const n = ringSlots.length;
   ctx.font = "11px system-ui, -apple-system, 'Segoe UI', sans-serif";
   ringSlots.forEach((s, i) => {
-    s.shown += (s.target - s.shown) * 0.08;
     const a = -Math.PI / 2 + (i / n) * Math.PI * 2;
     const len = 4 + (s.shown / max) * maxLen;
     const x0 = cx + Math.cos(a) * (r + 4), y0 = cy + Math.sin(a) * (r + 4);
@@ -332,12 +360,11 @@ function drawRing() {
     ctx.textAlign = Math.abs(Math.cos(a)) < 0.2 ? "center" : right ? "left" : "right";
     ctx.textBaseline = Math.sin(a) < -0.8 ? "bottom" : Math.sin(a) > 0.8 ? "top" : "middle";
     ctx.fillStyle = "rgba(232,238,247,.9)";
-    ctx.fillText(langName(s.key), lx, ly);
+    ctx.fillText(s.label, lx, ly);
     ctx.fillStyle = "rgba(138,150,168,.9)";
     const dy = ctx.textBaseline === "bottom" ? -13 : 13;
     ctx.fillText(`${Math.round(s.shown)}/min`, lx, ly + dy);
   });
-  requestAnimationFrame(drawRing);
 }
 requestAnimationFrame(drawRing);
 
@@ -346,6 +373,7 @@ requestAnimationFrame(drawRing);
 // ---------------------------------------------------------------------------
 const API = "https://public.api.bsky.app/xrpc/";
 let showTitles = true;
+const CHECK_BATCH = 8; // posts checked per round: about what the feed and cards can use
 let reservoir = [], offered = 0;
 const displayQueue = []; // checked posts waiting for a card on the globe
 const feedQueue = [];    // checked posts waiting for the feed
@@ -353,15 +381,16 @@ let cards = [];
 
 function offerCandidate(c) {
   offered++;
-  if (reservoir.length < 25) reservoir.push(c);
-  else { const j = Math.floor(Math.random() * offered); if (j < 25) reservoir[j] = c; }
+  if (reservoir.length < CHECK_BATCH) reservoir.push(c);
+  else { const j = Math.floor(Math.random() * offered); if (j < CHECK_BATCH) reservoir[j] = c; }
 }
 
 setInterval(() => {
   const batch = reservoir; reservoir = []; offered = 0;
-  if (!batch.length || (displayQueue.length > 15 && feedQueue.length > 15)) return;
+  if (!batch.length || feedQueue.length >= 10) return; // enough waiting already
   // Wait a little so the AppView has indexed the posts and applied labels
-  setTimeout(() => checkBatch(batch), 5000);
+  // Wait so the AppView has indexed the posts and Bluesky's automatic labelers have had time to act
+  setTimeout(() => checkBatch(batch), 15000);
 }, 3000);
 
 async function checkBatch(batch) {
@@ -373,13 +402,15 @@ async function checkBatch(batch) {
     posts = (await res.json()).posts || [];
   } catch { return; }
   const byUri = new Map(posts.map((p) => [p.uri, p]));
+  const center = world.pointOfView();
   for (const c of batch) {
     const p = byUri.get(c.uri);
     if (!p) continue;
     // Anything carrying a moderation label (on the post or the account) is skipped,
     // including accounts that asked not to be shown to logged-out viewers.
     if ((p.labels && p.labels.length) || (p.author.labels && p.author.labels.length)) continue;
-    if (looksAdult(p.author.displayName) || looksAdult(p.author.handle)) continue;
+    if (looksAdult(p.author.displayName) || looksAdult(p.author.handle) ||
+        looksAdult(p.embed?.external?.uri) || looksAdult(p.embed?.media?.external?.uri)) continue;
     const item = { ...c, handle: p.author.handle, name: p.author.displayName || "", added: performance.now() };
     const fromHandle = countryFromHandle(p.author.handle);
     if (fromHandle) {
@@ -387,7 +418,7 @@ async function checkBatch(batch) {
         why: `${placeName(fromHandle.cc)} · from handle domain .${fromHandle.tld}` };
     }
     // Front-facing posts are candidates for a globe card; the rest go to the feed
-    if (angDist(item.loc, viewCenter) < 70 && displayQueue.length <= 15) displayQueue.push(item);
+    if (angDist(item.loc, center) < 70 && displayQueue.length <= 15) displayQueue.push(item);
     else feedQueue.push(item);
   }
   if (feedQueue.length > 30) feedQueue.splice(0, feedQueue.length - 30);
@@ -395,13 +426,28 @@ async function checkBatch(batch) {
 
 // Moderation labels often arrive late (or never) for spam and promo accounts, so a blunt
 // multilingual word filter backs them up. It errs toward hiding: this runs unattended.
+// Whole words only (JavaScript's \b only knows ASCII, so use letter lookarounds instead)
+const wholeWords = (words) => String.raw`(?<![\p{L}\p{N}])(?:${words})(?![\p{L}\p{N}])`;
 const ADULT_RE = new RegExp([
-  String.raw`\b(nsfw|porn\w*|xxx|nudes?|nudity|naked|onlyfans|fansly|hentai|r-?18|18\+|sex\w*|horny|explicit|camgirls?|escorts?|fetish\w*|lewd|erotic\w*|boobs?|tits|cock|dick|pussy|milf|adult (content|videos?|fiction|works?|films?))\b`,
-  "成人向け|18禁|R-?18|エロ|アダルト|AV女優|FANZA|裏垢|オフパコ|エッチ|えっち",
-  "色情|约炮|約炮|福利姬|成人影片", "야동|19금|성인용",
-  String.raw`\b(desnud\w*|tesão|putas?|conte[uú]do adulto|contenido para adultos|nackt|geil|baise|порно|секс|интим)\b`,
+  wholeWords(String.raw`nsfw|porn\p{L}*|xxx|nudes?|nudity|naked|onlyfans|fansly|hentai|r-?18|18\+|sex\p{L}*|horny|explicit|camgirls?|escorts?|fetish\p{L}*|lewd|erotic\p{L}*|boobs?|tits|cock|dick|pussy|milf|blowjob|handjob|cum(?:shot|s)?|masturbat\p{L}*|orgasm\p{L}*|creampie|bdsm|thots?|adult (?:content|videos?|fiction|works?|films?)`),
+  wholeWords(String.raw`desnud\p{L}*|tesão|putas?|putaria|safad[ao]s?|conte[uú]do adulto|contenido para adultos|nackt|geil|baise|порно|секс|интим`),
+  // Japanese, Chinese, Korean: no word gaps to rely on
+  "成人向け|18禁|R-?18|エロ|アダルト|AV女優|FANZA|裏垢|オフパコ|エッチ|えっち|オナニー|フェラ|まんこ|ちんぽ|ちんこ|射精|中出し|パイズリ|潮吹き|無修正|巨乳|爆乳|乳首|痴女|痴漢|セフレ|淫",
+  "色情|约炮|約炮|福利姬|成人影片|做爱|做愛|自慰|口交|裸聊|黄片",
+  "야동|19금|성인용|섹스|자위|야한",
+  // Adult stores and sites, in the text or in links
+  String.raw`dlsite|fanza|dmm\.co\.jp|onlyfans\.com|fansly|pornhub|xvideos|xhamster|xnxx|chaturbate|stripchat|manyvids|redtube|youporn|spankbang|eporner|missav|erome`,
 ].join("|"), "iu");
 const looksAdult = (s) => !!s && ADULT_RE.test(s);
+
+// Every link a post carries: link facets in the text and a link-preview card
+function postLinks(rec) {
+  const uris = [rec.embed?.external?.uri, rec.embed?.media?.external?.uri];
+  for (const f of Array.isArray(rec.facets) ? rec.facets : []) {
+    for (const feature of Array.isArray(f.features) ? f.features : []) uris.push(feature.uri);
+  }
+  return uris.filter((u) => typeof u === "string").join(" ");
+}
 
 function hideItem(item) {
   item.hidden = true;
@@ -517,7 +563,8 @@ function writePref(key, value) {
   } catch { /* storage unavailable */ }
 }
 
-const planMB = () => (trPlan || []).reduce((n, m) => n + m.mb, 0) + 6; // + translation engine
+const ENGINE_MB = 6; // Transformers.js and its runtime
+const planMB = () => (trPlan || []).reduce((n, m) => n + m.mb, 0) + ENGINE_MB;
 
 function setTrStatus(text, progress) {
   trStatus.textContent = "";
@@ -711,7 +758,7 @@ function renderExtras() {
         button("Hide", "primary", closePanel)));
   } else {
     const rows = trPlan.map((m) => el("tr", {}, el("td", {}, m.label), el("td", { class: "mb" }, `${m.mb} MB`)));
-    rows.push(el("tr", {}, el("td", {}, "Translation engine (Transformers.js)"), el("td", { class: "mb" }, "6 MB")));
+    rows.push(el("tr", {}, el("td", {}, "Translation engine (Transformers.js)"), el("td", { class: "mb" }, `${ENGINE_MB} MB`)));
     rows.push(el("tr", { class: "total" }, el("td", {}, "Total"), el("td", { class: "mb" }, `about ${planMB()} MB`)));
     body.push(
       el("p", {}, `Translates posts in other languages into ${lang}, right on this computer. ` +
@@ -801,9 +848,10 @@ setInterval(() => {
   if (showTitles && cards.length < 5 && displayQueue.length) {
     // Pick the queued post nearest the middle of the view that doesn't crowd a visible card
     let best = -1, bestD = 1e9;
+    const center = world.pointOfView();
     const taken = cards.concat(selected || []).map((c) => world.getScreenCoords(c.lat, c.lng, 0.01));
     displayQueue.forEach((it, i) => {
-      const d = angDist(it.loc, viewCenter);
+      const d = angDist(it.loc, center);
       if (d > 60) return;
       // Cards sit above their pin (~260 x 90px); keep them on screen and apart
       const s = world.getScreenCoords(it.loc.lat, it.loc.lng, 0.01);
@@ -830,22 +878,66 @@ const JETSTREAMS = [
   "jetstream2.us-east.bsky.network", "jetstream1.us-east.bsky.network",
   "jetstream1.us-west.bsky.network", "jetstream2.us-west.bsky.network",
 ];
-let hostIdx = 0, ws = null, retryMs = 1000;
+let hostIdx = 0, ws = null, retryMs = 1000, retryTimer = null;
+let lastMessageAt = 0, paused = false, hiddenTimer = null;
 const connEl = document.getElementById("conn"), connText = document.getElementById("connText");
 
 function connect() {
+  clearTimeout(retryTimer);
   const host = JETSTREAMS[hostIdx % JETSTREAMS.length];
   connEl.className = ""; connText.textContent = `connecting to ${host}…`;
-  ws = new WebSocket(`wss://${host}/subscribe?wantedCollections=app.bsky.feed.post`);
-  ws.onopen = () => { retryMs = 1000; connEl.className = "on"; connText.textContent = host; };
-  ws.onmessage = (ev) => { try { onEvent(JSON.parse(ev.data)); } catch { /* ignore malformed */ } };
-  ws.onclose = () => {
+  const sock = new WebSocket(`wss://${host}/subscribe?wantedCollections=app.bsky.feed.post`);
+  ws = sock;
+  // Events from a socket we've already replaced are ignored
+  sock.onopen = () => {
+    if (ws !== sock) return;
+    retryMs = 1000; lastMessageAt = performance.now();
+    connEl.className = "on"; connText.textContent = host;
+  };
+  sock.onmessage = (ev) => {
+    if (ws !== sock) return;
+    lastMessageAt = performance.now();
+    try { onEvent(JSON.parse(ev.data)); } catch { /* ignore malformed */ }
+  };
+  sock.onclose = () => {
+    if (ws !== sock) return;
+    ws = null;
+    if (paused) return;
     connEl.className = "off"; connText.textContent = "reconnecting…";
     hostIdx++;
-    setTimeout(connect, retryMs);
+    retryTimer = setTimeout(connect, retryMs);
     retryMs = Math.min(retryMs * 2, 30000);
   };
 }
+
+function dropSocket() {
+  const sock = ws;
+  ws = null;
+  if (sock) { sock.onopen = sock.onmessage = sock.onclose = null; try { sock.close(); } catch { /* already closed */ } }
+}
+
+// A connection can go quiet without ever closing; after 30s of silence, start a fresh one
+setInterval(() => {
+  if (paused || !ws || ws.readyState !== WebSocket.OPEN) return;
+  if (performance.now() - lastMessageAt > 30000) { dropSocket(); hostIdx++; connect(); }
+}, 10000);
+
+// Nobody watching: after a minute hidden, stop the stream (about 50 KB/s); resume at once when shown
+document.addEventListener("visibilitychange", () => {
+  clearTimeout(hiddenTimer);
+  if (document.hidden) {
+    hiddenTimer = setTimeout(() => {
+      paused = true;
+      clearTimeout(retryTimer);
+      dropSocket();
+      connEl.className = ""; connText.textContent = "paused while hidden";
+    }, 60000);
+  } else if (paused) {
+    paused = false;
+    retryMs = 1000;
+    connect();
+  }
+});
 
 // did:plc / did:web identifiers and record keys, per the AT Protocol specs
 const DID_RE = /^did:[a-z]+:[A-Za-z0-9._:%-]{1,2000}$/;
@@ -863,7 +955,7 @@ function onEvent(m) {
   total++; secCount++;
 
   const tag = Array.isArray(rec.langs) && rec.langs[0];
-  const loc = locate(tag, rec.text || "");
+  const loc = locate(tag, rec.text);
   const bucket = langBuckets[langBuckets.length - 1];
   const key = loc ? loc.lang : (parseLang(tag)?.key || "und");
   bucket.set(key, (bucket.get(key) || 0) + 1);
@@ -875,9 +967,10 @@ function onEvent(m) {
   pendingRings.push({ lat: loc.lat, lng: loc.lng, rgb, maxR: loc.tier === "known" ? 3 : 2.2, t });
   dots.push({ lat: loc.lat, lng: loc.lng, rgb, t, color: `rgba(${rgb},.9)` });
 
-  const text = (rec.text || "").trim();
+  const text = rec.text.trim();
   const selfLabeled = rec.labels && Array.isArray(rec.labels.values) && rec.labels.values.length;
-  if (!rec.reply && !selfLabeled && text.length >= 25 && text.length <= 300 && !looksAdult(text)) {
+  if (!rec.reply && !selfLabeled && text.length >= 25 && text.length <= 300 &&
+      !looksAdult(text) && !looksAdult(postLinks(rec))) {
     offerCandidate({ uri: `at://${m.did}/app.bsky.feed.post/${c.rkey}`, did: m.did, rkey: c.rkey, text, loc });
   }
 }
@@ -914,12 +1007,17 @@ document.getElementById("explore").addEventListener("click", () => setInteractiv
 document.getElementById("btnExit").addEventListener("click", () => setInteractive(false));
 document.getElementById("btnHelp").addEventListener("click", () => openPanel("help"));
 document.getElementById("btnExtras").addEventListener("click", () => openPanel("extras"));
+document.getElementById("btnQuit").addEventListener("click", () => tellHost("exit"));
 
 // ---------------------------------------------------------------------------
 // Keys and idle cursor
 // ---------------------------------------------------------------------------
 window.addEventListener("keydown", (e) => {
   bumpActivity();
+  if (HOST === "screensaver" && !interactive && overlay.hidden && e.key !== "e" && e.key !== "E") {
+    tellHost("exit");
+    return;
+  }
   if (!overlay.hidden) {
     if (e.key === "Escape") closePanel();
     return; // keys belong to the open panel
@@ -954,7 +1052,13 @@ function wake() {
   idleTimer = setTimeout(() => document.body.classList.add("idle"), 3000);
   bumpActivity();
 }
+window.addEventListener("mousedown", (e) => {
+  if (HOST === "screensaver" && !interactive && !e.target.closest("#explore")) tellHost("exit");
+});
 for (const ev of ["mousemove", "mousedown", "wheel", "touchstart"]) {
   window.addEventListener(ev, wake, { passive: true });
 }
 wake();
+
+// The app (not the screensaver) opens ready to explore
+if (HOST === "app") setInteractive(true);
