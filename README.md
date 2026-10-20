@@ -159,6 +159,11 @@ web/                 The app, shared by every platform
   vendor/            globe.gl and the Earth images, bundled (with their licenses)
 windows/             Windows screensaver/app (C++ and WebView2); embeds web/ at build time
   build.bat          Builds build\Murmuration.scr
+mac/                 macOS screensaver and app (Swift and WKWebView); bundles web/ at build time
+  App/               Murmuration.app: the globe in a window, interactive
+  Saver/             Murmuration.saver: the screensaver (look only) and its Options sheet
+  Shared/            Serves web/ to the page and decides what it may open
+  build.sh           Builds build/Murmuration.app and build/Murmuration.saver
 LICENSE              Apache License 2.0
 NOTICE               Credits and third-party licenses
 ```
