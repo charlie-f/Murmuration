@@ -1,0 +1,44 @@
+Murmuration
+Copyright 2026 Charlie (github.com/charlie-f) and Murmuration contributors
+https://github.com/charlie-f/Murmuration
+
+Licensed under the Apache License, Version 2.0 (see LICENSE).
+
+Murmuration is not affiliated with or endorsed by Bluesky Social PBC.
+"Bluesky" is a trademark of Bluesky Social PBC.
+
+-------------------------------------------------------------------------------
+Third-party software, models and data
+-------------------------------------------------------------------------------
+
+globe.gl and three-globe
+  Copyright (c) Vasco Asturiano. MIT License.
+  https://github.com/vasturiano/globe.gl
+  https://github.com/vasturiano/three-globe
+  The Earth and night-sky images come from the three-globe example images.
+
+Transformers.js (used only by the optional translation extra)
+  Copyright (c) Hugging Face. Apache License 2.0.
+  https://github.com/huggingface/transformers.js
+  Runs on ONNX Runtime Web, Copyright (c) Microsoft Corporation, MIT License.
+  https://github.com/microsoft/onnxruntime
+
+Opus-MT translation models (downloaded only if the viewer installs the
+translation extra)
+  Helsinki-NLP, University of Helsinki (Jörg Tiedemann and the OPUS-MT team).
+  https://github.com/Helsinki-NLP/Opus-MT
+  ONNX conversions published by Xenova on Hugging Face (Xenova/opus-mt-*).
+  opus-mt-ja-en, opus-mt-ROMANCE-en, opus-mt-de-en, opus-mt-ko-en,
+  opus-mt-mul-en and the en-* models: Apache License 2.0.
+  opus-mt-zh-en: Creative Commons Attribution 4.0 (CC BY 4.0),
+  https://creativecommons.org/licenses/by/4.0/
+
+Bluesky data
+  Posts are read live from Bluesky's public Jetstream service and checked
+  against the public Bluesky AppView (public.api.bsky.app). Post content
+  belongs to its authors. Murmuration shows public posts only, stores none of
+  them, and skips accounts that ask not to be shown to logged-out viewers.
+
+Inspiration
+  The 2007 Twingly Screensaver, which showed blog posts appearing on a
+  spinning globe. No Twingly code or assets are used.

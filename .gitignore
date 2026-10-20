@@ -1,0 +1,12 @@
+# OS and editor clutter
+.DS_Store
+Thumbs.db
+desktop.ini
+.vscode/
+.idea/
+
+# Build output (screensaver packages are built per platform)
+dist/
+build/
+*.scr
+*.saver
