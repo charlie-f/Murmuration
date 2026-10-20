@@ -10,10 +10,12 @@ document.getElementById("appVersion").textContent = APP.version;
 // and can ask the wrapper to close
 const HOST = new URLSearchParams(location.search).get("host");
 if (HOST) document.body.classList.add("host-" + HOST);
-const EXPLORE_ELSEWHERE = { app: "To explore, open the Murmuration app",
-  install: "To explore, install the Murmuration app" }[new URLSearchParams(location.search).get("explore")];
+// Only the two values the Mac screensaver sends count (never inherited names like "constructor")
+const exploreParam = new URLSearchParams(location.search).get("explore");
+const EXPLORE_ELSEWHERE = exploreParam === "app" ? "To explore, open the Murmuration app"
+  : exploreParam === "install" ? "To explore, install the Murmuration app" : "";
 if (EXPLORE_ELSEWHERE) {
-  document.body.classList.add("explore-" + new URLSearchParams(location.search).get("explore"));
+  document.body.classList.add("explore-" + exploreParam);
   document.querySelector("#exploreBox .hint-app").textContent = EXPLORE_ELSEWHERE;
 }
 const tellHost = (message) => {
