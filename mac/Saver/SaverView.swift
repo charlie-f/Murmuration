@@ -44,6 +44,7 @@ final class MurmurationSaverView: ScreenSaverView {
         let view = WebHost.makeWebView(webRoot: web, host: "screensaver", persistent: false, delegate: delegate)
         // macOS hosts the screensaver in a window it reports as covered, and WebKit stops
         // drawing covered pages. This WebKit setting isn't public, so it's skipped if it's gone.
+        // If the screensaver goes blank again, look for "window occluded 1" in the WebKit log.
         if view.responds(to: NSSelectorFromString("_setWindowOcclusionDetectionEnabled:")) {
             view.setValue(false, forKey: "windowOcclusionDetectionEnabled")
         }
