@@ -6,7 +6,7 @@ Murmuration is a free, open-source screensaver that shows public [Bluesky](https
 
 It's inspired by the 2007 [Twingly Screensaver](https://Labnol.org/internet/blogging/blogging-screensaver-visualize-blog-stories-twingly-globe/2880/), which did the same for blogs.
 
-> **Status: early prototype.** The web version works in any modern browser, and the **Windows** screensaver builds from source (see below). Ready-made downloads for Windows and **macOS** will be published on the [Releases page](https://github.com/charlie-f/Murmuration/releases).
+> **Status: early prototype.** The web version works in any modern browser, and the **Windows** and **macOS** screensavers build from source (see below). Ready-made downloads will be published on the [Releases page](https://github.com/charlie-f/Murmuration/releases).
 
 ---
 
@@ -41,6 +41,22 @@ While the screensaver runs, move the mouse to show the **Explore** button. Press
 Murmuration keeps its files and settings in `%LOCALAPPDATA%\Murmuration`. Delete that folder to remove every trace, including the translation extra.
 
 For development, `windows\build.bat dev` builds and opens the app reading `web\` live, with developer tools enabled.
+
+### macOS screensaver and app (build from source)
+
+Needs macOS 13 or later and Xcode (or just the Command Line Tools: `xcode-select --install`). Nothing else is downloaded.
+
+1. Run `mac/build.sh`. It builds `mac/build/Murmuration.saver` and `mac/build/Murmuration.app`, for both Apple silicon and Intel Macs.
+2. Double-click `Murmuration.saver` and choose to install it. It appears in **System Settings → Screen Saver**.
+3. Drag `Murmuration.app` into **Applications**.
+
+macOS closes a screensaver as soon as you touch the mouse or keyboard, so on a Mac the screensaver is for watching only, and exploring (spinning the globe, reading earlier posts, the Translation extra) happens in **Murmuration.app**. The screensaver's **Options…** button opens the app. To save power, only the main display runs the live globe; other displays show a still picture.
+
+The translation extra lives in the app. The screensaver shows posts untranslated and keeps nothing on disk. To remove the app's saved settings and the translation extra, use **Uninstall** in its Translation panel, or delete the `com.github.charlie-f.Murmuration` folders in `~/Library/WebKit` and `~/Library/Caches`.
+
+The build is signed only for the Mac it was built on. Copied to another Mac, it will get a Gatekeeper warning until there's a release signed with a paid Apple developer identity (set `MURMURATION_SIGN` to a signing identity to use one).
+
+For development, `mac/build.sh dev` builds with the Web Inspector enabled and opens the app.
 
 ---
 
@@ -143,11 +159,16 @@ web/                 The app, shared by every platform
   vendor/            globe.gl and the Earth images, bundled (with their licenses)
 windows/             Windows screensaver/app (C++ and WebView2); embeds web/ at build time
   build.bat          Builds build\Murmuration.scr
+mac/                 macOS screensaver and app (Swift and WKWebView); bundles web/ at build time
+  App/               Murmuration.app: the globe in a window, interactive
+  Saver/             Murmuration.saver: the screensaver (look only) and its Options sheet
+  Shared/            Serves web/ to the page and decides what it may open
+  build.sh           Builds build/Murmuration.app and build/Murmuration.saver
 LICENSE              Apache License 2.0
 NOTICE               Credits and third-party licenses
 ```
 
-The Windows wrapper (and the macOS one, coming) packages the same `web/` files, so a change made once reaches every platform.
+The Windows and macOS wrappers package the same `web/` files, so a change made once reaches every platform.
 
 ## Roadmap
 
@@ -156,7 +177,8 @@ The Windows wrapper (and the macOS one, coming) packages the same `web/` files, 
 - [x] Optional on-device translation
 - [x] Windows screensaver (build from source)
 - [ ] Windows release download (signed)
-- [ ] macOS screensaver and companion app (macOS closes screensavers on any input, so interactive mode will open as an app on Mac)
+- [x] macOS screensaver and companion app (build from source; interactive mode is the app, since macOS closes screensavers on any input)
+- [ ] macOS release download (signed and notarized)
 - [x] Globe library and images bundled with the app
 
 ## Contributing
