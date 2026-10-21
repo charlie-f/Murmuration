@@ -1129,7 +1129,10 @@ function setFocus(key) {
     const centre = langCentre(focus);
     if (centre) world.pointOfView({ ...centre, altitude: world.pointOfView().altitude }, 1400);
   }
+  // Restored or hidden entries change the feed's height: stay at the newest post if that's where we were
+  const atBottom = feedEl.scrollHeight - feedEl.scrollTop - feedEl.clientHeight < 40;
   for (const el of feedEl.children) el.classList.toggle("off", !matchesFocus(el.dataset.lang));
+  if (atBottom) feedEl.scrollTop = feedEl.scrollHeight;
   const before = cards.length;
   cards = cards.filter((c) => matchesFocus(c.lang));
   if (cards.length !== before) refreshHtml();
@@ -1161,6 +1164,7 @@ function slotAt(e) {
 }
 let press = null;
 globeEl.addEventListener("pointerdown", (e) => {
+  if (press && performance.now() - press.t > 1000) press = null;  // its release never arrived
   if (press) { press.multi = true; return; }
   if (!interactive || !overlay.hidden || e.target.closest(".card")) return;
   press = { id: e.pointerId, x: e.clientX, y: e.clientY, t: performance.now(), key: slotAt(e)?.key, multi: false };
@@ -1176,6 +1180,9 @@ globeEl.addEventListener("pointerup", (e) => {
   setFocus(p.key === focus ? null : p.key);
 }, true);
 globeEl.addEventListener("pointercancel", () => { press = null; }, true);
+// A release outside the globe, or leaving the window mid-press, ends the press too
+window.addEventListener("pointerup", (e) => { if (press && e.pointerId === press.id) press = null; });
+window.addEventListener("blur", () => { press = null; });
 // Hover: a pointer cursor and a brighter label
 globeEl.addEventListener("mousemove", (e) => {
   const key = interactive && overlay.hidden ? slotAt(e)?.key || null : null;
