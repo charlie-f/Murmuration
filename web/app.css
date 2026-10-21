@@ -29,7 +29,22 @@ body:not(.interactive) #globe, body:not(.interactive) #feed, body:not(.interacti
   -webkit-mask-image: linear-gradient(to bottom, transparent 0, #000 22%);
   mask-image: linear-gradient(to bottom, transparent 0, #000 22%);
 }
-#feed > .fitem:first-child { margin-top: auto; } /* keeps entries pinned to the bottom */
+/* An empty first item soaks up the free space, keeping entries pinned to the bottom even when
+   some are hidden (another language while one is followed) */
+#feed::before { content: ""; margin-top: auto; }
+#feed > .fitem.off { display: none; }
+/* "Spanish only ×": which language the feed and cards are following */
+#focusLine {
+  position: fixed; left: 16px; z-index: 6; display: flex; align-items: center; gap: 8px;
+  font-size: 12px; color: var(--muted);
+}
+#focusLine[hidden] { display: none; }
+#focusClear {
+  font: inherit; font-size: 14px; line-height: 1; color: var(--ink); cursor: pointer;
+  background: none; border: 1px solid var(--line); border-radius: 50%; width: 20px; height: 20px; padding: 0;
+}
+#focusClear:hover { border-color: var(--pink); color: var(--pink); }
+@media (max-width: 699px) { #focusLine { display: none !important; } }
 body.interactive #feed {
   overflow-y: auto; scrollbar-width: thin; scrollbar-color: rgba(140,170,210,.3) transparent;
   -webkit-mask-image: linear-gradient(to bottom, transparent 0, #000 8%);

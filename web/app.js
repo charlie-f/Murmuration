@@ -18,6 +18,11 @@ if (EXPLORE_ELSEWHERE) {
   document.body.classList.add("explore-" + exploreParam);
   document.querySelector("#exploreBox .hint-app").textContent = EXPLORE_ELSEWHERE;
 }
+// Following one language (interactive only, never saved): its ring key, or null for everyone
+let focus = null, focusShownAt = 0, hoverKey = null;
+// Exact key, except bare "zh" also takes Traditional and Simplified
+const matchesFocus = (k) => !focus || k === focus || (focus === "zh" && typeof k === "string" && k.startsWith("zh"));
+
 const tellHost = (message) => {
   window.chrome?.webview?.postMessage(message);                       // Windows (WebView2)
   window.webkit?.messageHandlers?.murmuration?.postMessage(message);  // macOS (WKWebView)
@@ -216,6 +221,8 @@ const controls = world.controls();
 let rotateWanted = true; // what Space last asked for; selection pauses rotation on top of this
 controls.autoRotate = true;
 controls.autoRotateSpeed = 0.35;
+// The slow spin pauses while a post is selected or a language is followed
+const updateSpin = () => { controls.autoRotate = rotateWanted && !selected && !focus; };
 controls.enableDamping = true;
 // I1: globe.gl's directional light, moved to where the sun is overhead right now (declination
 // from the day of the year, longitude from UTC time), so the real night side reads as night
@@ -250,19 +257,23 @@ setInterval(() => {
   rings = rings.concat(pendingRings).filter((r) => now - r.t < 1400);
   pendingRings = [];
   if (document.hidden) return;
-  world.ringsData(selected ? rings.concat(selected.ring) : rings);
+  const shown = focus ? rings.filter((r) => !r.lang || matchesFocus(r.lang)) : rings;  // pink ripples have no lang
+  world.ringsData(selected ? shown.concat(selected.ring) : shown);
 }, 200);
 // The trail is one merged mesh that globe.gl rebuilds on every update, so update it sparingly
 setInterval(() => {
   const now = performance.now();
   dots = dots.filter((d) => now - d.t < 45000);
-  if (document.hidden) return;
-  for (const d of dots) {
+  if (!document.hidden) refreshDots(now);
+}, 2000);
+function refreshDots(now = performance.now()) {
+  const shown = focus ? dots.filter((d) => matchesFocus(d.lang)) : dots;
+  for (const d of shown) {
     const a = 0.85 * (1 - (now - d.t) / 45000) + 0.1;
     d.color = `rgba(${d.rgb},${a.toFixed(2)})`;
   }
-  world.pointsData(dots);
-}, 2000);
+  world.pointsData(shown);
+}
 
 // ---------------------------------------------------------------------------
 // Stats: posts/sec and a rolling 60-second count per language
@@ -278,6 +289,7 @@ setInterval(() => {
   const pps = ppsWindow.reduce((a, b) => a + b, 0) / ppsWindow.length;
   document.getElementById("pps").textContent = pps.toFixed(1);
   document.getElementById("total").textContent = total.toLocaleString();
+  if (focus) showFocusLine();
 }, 1000);
 
 function langCounts() {
@@ -305,6 +317,12 @@ function fitAltitude() {
   const theta = Math.atan((avail / (h / 2)) * Math.tan(fov / 2));
   return Math.max(1.3, Math.min(4, 1 / Math.sin(theta) - 1));
 }
+function fitFeedTop() {
+  const brand = document.getElementById("brand"), line = document.getElementById("focusLine");
+  const top = brand.offsetTop + brand.offsetHeight + 14;
+  line.style.top = top + "px";
+  feedEl.style.top = top + (line.hidden ? 0 : line.offsetHeight + 8) + "px";
+}
 function fitFeedBottom() {
   feedEl.style.bottom = document.getElementById("legend").offsetHeight + 30 + "px";
 }
@@ -314,7 +332,7 @@ function layout() {
   feedEl.style.display = side ? "" : "none";
   feedEl.style.width = side - 28 + "px";
   const brand = document.getElementById("brand"), legend = document.getElementById("legend");
-  feedEl.style.top = brand.offsetTop + brand.offsetHeight + 14 + "px";
+  fitFeedTop();
   fitFeedBottom();
   globeEl.style.left = side + "px";
   world.width(w).height(h);
@@ -332,7 +350,11 @@ world.pointOfView({ lat: 30, lng: -40 });
 layout();
 
 function rerankRing() {
-  const counts = [...langCounts()].filter(([k]) => k !== "und").sort((a, b) => b[1] - a[1]).slice(0, 12);
+  const all = [...langCounts()].filter(([k]) => k !== "und").sort((a, b) => b[1] - a[1]);
+  let counts = all.slice(0, 12);
+  if (focus && !counts.some(([k]) => k === focus)) {
+    counts = all.slice(0, 11).concat([all.find(([k]) => k === focus) || [focus, 0]]);
+  }
   const prev = new Map(ringSlots.map((s) => [s.key, s]));
   ringSlots = counts.map(([key, n]) => ({ key, label: langName(key), target: n, shown: prev.get(key)?.shown || 0,
     pulseAt: prev.get(key)?.pulseAt || 0, glow: 0 }));
@@ -382,6 +404,15 @@ function stopNod() {
   nodding = false;
 }
 
+// F1: a label block (name and n/min) as a click target, padded to at least 44 x 28 px
+function labelRect(lx, ly, dy, width) {
+  const x = ctx.textAlign === "left" ? lx : ctx.textAlign === "right" ? lx - width : lx - width / 2;
+  const top = ctx.textBaseline === "bottom" ? ly + dy - 12 : ctx.textBaseline === "top" ? ly : ly - 7;
+  const height = ctx.textBaseline === "middle" ? 27 : 26;
+  const w = Math.max(44, width + 8), h = Math.max(28, height + 4);
+  return { x: x + width / 2 - w / 2, y: top + height / 2 - h / 2, w, h };
+}
+
 function drawRing(now) {
   requestAnimationFrame(drawRing);
   nod(now);
@@ -428,11 +459,15 @@ function drawRing(now) {
     const right = Math.cos(a) >= -0.01;
     ctx.textAlign = Math.abs(Math.cos(a)) < 0.2 ? "center" : right ? "left" : "right";
     ctx.textBaseline = Math.sin(a) < -0.8 ? "bottom" : Math.sin(a) > 0.8 ? "top" : "middle";
-    ctx.fillStyle = `rgba(232,238,247,${(0.9 + 0.1 * s.glow).toFixed(2)})`;
+    const count = `${Math.round(s.shown)}/min`;
+    const focused = focus === s.key, dim = focus && !focused ? 0.45 : 1;
+    const lit = focused || hoverKey === s.key || s.glow;
+    ctx.fillStyle = focused ? `rgba(${PINK},1)` : `rgba(232,238,247,${((lit ? 1 : 0.9) * dim).toFixed(2)})`;
     ctx.fillText(s.label, lx, ly);
-    ctx.fillStyle = "rgba(138,150,168,.9)";
+    ctx.fillStyle = `rgba(138,150,168,${(0.9 * dim).toFixed(2)})`;
     const dy = ctx.textBaseline === "bottom" ? -13 : 13;
-    ctx.fillText(`${Math.round(s.shown)}/min`, lx, ly + dy);
+    ctx.fillText(count, lx, ly + dy);
+    s.rect = LANGS[s.key] ? labelRect(lx, ly, dy, Math.max(ctx.measureText(s.label).width, ctx.measureText(count).width)) : null;
   });
 }
 requestAnimationFrame(drawRing);
@@ -449,6 +484,7 @@ const feedQueue = [];    // checked posts waiting for the feed
 let cards = [];
 
 function offerCandidate(c) {
+  if (!matchesFocus(c.lang)) return;  // following one language: collect only that one
   offered++;
   if (reservoir.length < CHECK_BATCH) reservoir.push(c);
   else { const j = Math.floor(Math.random() * offered); if (j < CHECK_BATCH) reservoir[j] = c; }
@@ -480,6 +516,7 @@ async function checkBatch(batch) {
     if ((p.labels && p.labels.length) || (p.author.labels && p.author.labels.length)) continue;
     if (looksAdult(p.author.displayName) || looksAdult(p.author.handle) ||
         looksAdult(p.embed?.external?.uri) || looksAdult(p.embed?.media?.external?.uri)) continue;
+    if (!matchesFocus(c.lang)) continue;  // the focus may have changed while the batch waited
     const item = { ...c, handle: p.author.handle, name: p.author.displayName || "", added: performance.now() };
     const fromHandle = countryFromHandle(p.author.handle);
     if (fromHandle) {
@@ -592,6 +629,8 @@ function hoverLocate(item) {
 function addToFeed(item) {
   const el = document.createElement("div");
   el.className = "fitem " + item.loc.tier;
+  el.dataset.lang = item.lang;
+  if (focus) focusShownAt = performance.now();
   postBody(item, el, 180);
   el.addEventListener("click", () => select(item));
   el.addEventListener("mouseenter", () => hoverLocate(item));
@@ -753,14 +792,14 @@ async function uninstallExtras() {
 function requestTranslation(item) {
   if (!trEnabled || !trReady || item.trState) return;
   const base = (k) => k.split("-")[0];
-  if (!item.loc.lang || base(item.loc.lang) === base(userLang)) { item.trState = "skip"; return; }
+  if (!item.lang || base(item.lang) === base(userLang)) { item.trState = "skip"; return; }
   // Links, hashtags and mentions don't translate; leave them out
   const text = item.text.replace(/https?:\/\/\S+|[#@][^\s#@]+/g, "").replace(/\s+/g, " ").trim();
   if ((text.match(/\p{L}/gu) || []).length < 6) { item.trState = "skip"; return; }
   const id = ++trSeq;
   item.trState = "pending";
   trPending.set(id, item);
-  trWorker.postMessage({ type: "translate", id, text, src: item.loc.lang, tgt: userLang });
+  trWorker.postMessage({ type: "translate", id, text, src: item.lang, tgt: userLang });
 }
 
 function applyTranslation(item) {
@@ -768,7 +807,7 @@ function applyTranslation(item) {
   for (const v of item.views || []) {
     v.txt.textContent = truncate(item.translation, v.maxChars);
     v.orig.textContent = truncate(item.text, v.maxChars);
-    const lang = langName(item.loc.lang);
+    const lang = langName(item.lang);
     v.trnote.textContent = item.loc.why.includes(lang) ? " · translated" : ` · translated from ${lang}`;
     v.box.classList.add("has-tr");
   }
@@ -902,7 +941,7 @@ function select(item) {
   // Clear the area: no duplicate of this post, and no ordinary cards crowding it
   cards = cards.filter((c) => c !== item && angDist(c, item.loc) > 25);
   refreshHtml();
-  controls.autoRotate = false;
+  updateSpin();
   world.pointOfView({ lat, lng, altitude: world.pointOfView().altitude }, 1400);
 }
 
@@ -910,7 +949,7 @@ function deselect() {
   if (!selected) return;
   selected.item.feedEl?.classList.remove("sel");
   selected = null;
-  controls.autoRotate = rotateWanted;
+  updateSpin();
   refreshHtml();
 }
 
@@ -946,7 +985,8 @@ setInterval(() => {
       item.el = makeCard(item);
       item.shownAt = now;
       cards.push(item);
-      pulseRing(item.loc.lang);
+      pulseRing(item.lang);
+      if (focus) focusShownAt = performance.now();
       changed = true;
     }
   }
@@ -1045,17 +1085,112 @@ function onEvent(m) {
 
   const rgb = loc.tier === "known" ? CYAN : AMBER;
   const t = performance.now();
-  pendingRings.push({ lat: loc.lat, lng: loc.lng, rgb, maxR: loc.tier === "known" ? 3 : 2.2, t });
-  dots.push({ lat: loc.lat, lng: loc.lng, rgb, t, color: `rgba(${rgb},.9)` });
+  pendingRings.push({ lat: loc.lat, lng: loc.lng, rgb, maxR: loc.tier === "known" ? 3 : 2.2, t, lang: loc.lang });
+  dots.push({ lat: loc.lat, lng: loc.lng, rgb, t, color: `rgba(${rgb},.9)`, lang: loc.lang });
 
   const text = rec.text.trim();
   const selfLabeled = rec.labels && Array.isArray(rec.labels.values) && rec.labels.values.length;
   if (!rec.reply && !selfLabeled && text.length >= 25 && text.length <= 300 &&
       !looksAdult(text) && !looksAdult(postLinks(rec))) {
-    offerCandidate({ uri: `at://${m.did}/app.bsky.feed.post/${c.rkey}`, did: m.did, rkey: c.rkey, text, loc });
+    offerCandidate({ uri: `at://${m.did}/app.bsky.feed.post/${c.rkey}`, did: m.did, rkey: c.rkey, text, loc, lang: loc.lang });
   }
 }
 connect();
+
+// ---------------------------------------------------------------------------
+// Following one language from the ring
+// ---------------------------------------------------------------------------
+// Where a language lives: the weighted mean of its countries as 3D unit vectors, which,
+// unlike averaging latitudes and longitudes, doesn't break across the date line
+function langCentre(key) {
+  const weights = LANGS[key];
+  if (!weights) return null;
+  let x = 0, y = 0, z = 0;
+  const r = Math.PI / 180;
+  for (const [code, wgt] of Object.entries(weights)) {
+    const [lat, lng] = PLACES[code];
+    x += wgt * Math.cos(lat * r) * Math.cos(lng * r);
+    y += wgt * Math.cos(lat * r) * Math.sin(lng * r);
+    z += wgt * Math.sin(lat * r);
+  }
+  return { lat: Math.atan2(z, Math.hypot(x, y)) / r, lng: Math.atan2(y, x) / r };
+}
+
+function setFocus(key) {
+  if (key === focus) return;
+  focus = key;
+  focusShownAt = performance.now();
+  if (focus) {
+    for (const q of [displayQueue, feedQueue]) {
+      for (let i = q.length - 1; i >= 0; i--) if (!matchesFocus(q[i].lang)) q.splice(i, 1);
+    }
+    reservoir = reservoir.filter((c) => matchesFocus(c.lang));
+    offered = reservoir.length;
+    const centre = langCentre(focus);
+    if (centre) world.pointOfView({ ...centre, altitude: world.pointOfView().altitude }, 1400);
+  }
+  // Restored or hidden entries change the feed's height: stay at the newest post if that's where we were
+  const atBottom = feedEl.scrollHeight - feedEl.scrollTop - feedEl.clientHeight < 40;
+  for (const el of feedEl.children) el.classList.toggle("off", !matchesFocus(el.dataset.lang));
+  if (atBottom) feedEl.scrollTop = feedEl.scrollHeight;
+  const before = cards.length;
+  cards = cards.filter((c) => matchesFocus(c.lang));
+  if (cards.length !== before) refreshHtml();
+  updateSpin();
+  refreshDots();
+  rerankRing();
+  showFocusLine();
+}
+
+function showFocusLine() {
+  const line = document.getElementById("focusLine");
+  const wasHidden = line.hidden;
+  line.hidden = !focus;
+  if (focus) {
+    const waiting = performance.now() - focusShownAt > 20000;
+    document.getElementById("focusText").textContent = `${langName(focus)} only${waiting ? ", waiting for posts" : ""}`;
+  }
+  if (line.hidden !== wasHidden) fitFeedTop();
+}
+document.getElementById("focusClear").addEventListener("click", () => setFocus(null));
+
+// F2: a ring label is a click target only for a real click: same label at press and release,
+// under 6 px of movement, under 600 ms, one pointer. Anything else is a drag of the globe.
+function slotAt(e) {
+  const box = canvas.getBoundingClientRect();
+  const x = e.clientX - box.left, y = e.clientY - box.top;
+  return ringSlots.find((s) => s.rect && x >= s.rect.x && x <= s.rect.x + s.rect.w &&
+    y >= s.rect.y && y <= s.rect.y + s.rect.h) || null;
+}
+let press = null;
+globeEl.addEventListener("pointerdown", (e) => {
+  if (press && performance.now() - press.t > 1000) press = null;  // its release never arrived
+  if (press) { press.multi = true; return; }
+  if (!interactive || !overlay.hidden || e.target.closest(".card")) return;
+  press = { id: e.pointerId, x: e.clientX, y: e.clientY, t: performance.now(), key: slotAt(e)?.key, multi: false };
+}, true);
+globeEl.addEventListener("pointerup", (e) => {
+  if (!press || e.pointerId !== press.id) return;
+  const p = press;
+  press = null;
+  if (!p.key || p.multi || !interactive) return;
+  if (Math.hypot(e.clientX - p.x, e.clientY - p.y) >= 6 || performance.now() - p.t >= 600) return;
+  if (slotAt(e)?.key !== p.key) return;
+  if (selected) deselect();
+  setFocus(p.key === focus ? null : p.key);
+}, true);
+globeEl.addEventListener("pointercancel", () => { press = null; }, true);
+// A release outside the globe, or leaving the window mid-press, ends the press too
+window.addEventListener("pointerup", (e) => { if (press && e.pointerId === press.id) press = null; });
+window.addEventListener("blur", () => { press = null; });
+// Hover: a pointer cursor and a brighter label
+globeEl.addEventListener("mousemove", (e) => {
+  const key = interactive && overlay.hidden ? slotAt(e)?.key || null : null;
+  if (key === hoverKey) return;
+  hoverKey = key;
+  globeEl.style.cursor = key ? "pointer" : "";
+  ringDirty = true;
+});
 
 // ---------------------------------------------------------------------------
 // Modes: screensaver (look only) and interactive (spin, click, scroll)
@@ -1075,6 +1210,7 @@ function setInteractive(on) {
     }
   } else {
     deselect();
+    setFocus(null);
     closePanel();
     feedEl.scrollTop = feedEl.scrollHeight;
   }
@@ -1114,10 +1250,10 @@ window.addEventListener("keydown", (e) => {
     if (!showTitles) { cards = []; displayQueue.length = 0; refreshHtml(); }
   } else if (e.key === " ") {
     rotateWanted = !rotateWanted;
-    controls.autoRotate = rotateWanted && !selected;
+    updateSpin();
     e.preventDefault();
   } else if (e.key === "Escape") {
-    deselect();
+    if (selected) deselect(); else if (focus) setFocus(null);
   } else if (e.key === "l" || e.key === "L") {
     if (extras === "installed") {
       setTranslate(!trEnabled);

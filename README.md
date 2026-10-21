@@ -74,6 +74,7 @@ Murmuration has two modes.
 |---|---|
 | Spin the globe | Drag it |
 | Zoom | Scroll wheel or pinch |
+| Follow one language | Click its name on the ring around the globe; the globe turns to where it is spoken, and the feed and cards show only that language. Click it again or press **Esc** to show all languages again |
 | See where a post is | Rest the pointer on it in the feed; a pink ripple goes out from its spot |
 | Find a post on the globe | Click it in the feed on the left; the globe turns to it and marks it in pink |
 | Let go of a selected post | Click it again, or press **Esc** |
