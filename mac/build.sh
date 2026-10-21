@@ -31,7 +31,7 @@ bundle() {
     mkdir -p "$1/Contents/MacOS" "$1/Contents/Resources"
     sed "s/VERSION/$VERSION/g" "$2" > "$1/Contents/Info.plist"
     plutil -lint -s "$1/Contents/Info.plist"
-    rsync -a --exclude .DS_Store "$WEB/" "$1/Contents/Resources/web/"
+    rsync -a --no-links --exclude .DS_Store "$WEB/" "$1/Contents/Resources/web/"
 }
 
 APP=build/Murmuration.app

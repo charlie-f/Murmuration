@@ -29,6 +29,7 @@ enum WebHost {
         webView.uiDelegate = delegate
         webView.allowsBackForwardNavigationGestures = false
         webView.allowsMagnification = false
+        webView.allowsLinkPreview = false  // a force click would otherwise preview a link in a new web view
         webView.underPageBackgroundColor = .black
         #if DEV
         if #available(macOS 13.3, *) { webView.isInspectable = true }
@@ -92,7 +93,8 @@ private final class WeakMessageHandler: NSObject, WKScriptMessageHandler {
     }
 }
 
-/// Answers murmuration://app/<path> from files under `root`, and nothing outside it.
+/// Answers murmuration://app/<path> from files under `root`, and nothing outside it
+/// (paths are compared after resolving "..", percent-encoding and symlinks).
 private final class BundleSchemeHandler: NSObject, WKURLSchemeHandler {
     private let root: URL
     private static let types = [
@@ -101,11 +103,11 @@ private final class BundleSchemeHandler: NSObject, WKURLSchemeHandler {
         "png": "image/png", "jpg": "image/jpeg", "svg": "image/svg+xml", "txt": "text/plain; charset=utf-8",
     ]
 
-    init(root: URL) { self.root = root.standardizedFileURL }
+    init(root: URL) { self.root = root.standardizedFileURL.resolvingSymlinksInPath() }
 
     func webView(_ webView: WKWebView, start task: WKURLSchemeTask) {
         guard let url = task.request.url else { return }
-        let file = root.appendingPathComponent(url.path).standardizedFileURL
+        let file = root.appendingPathComponent(url.path).standardizedFileURL.resolvingSymlinksInPath()
         let inside = file.path.hasPrefix(root.path + "/")
         let type = Self.types[file.pathExtension.lowercased()]
         guard url.host == "app", inside, let type, let data = try? Data(contentsOf: file) else {

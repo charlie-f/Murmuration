@@ -111,14 +111,15 @@ Murmuration can translate posts into your language, right on your computer. It's
 | Korean | 120 MB |
 | Chinese | 119 MB |
 | All other languages (shared model, rougher) | 118 MB |
-| Translation engine | 6 MB |
-| **Total** | **about 709 MB** |
+| Translation engine (Transformers.js and ONNX Runtime) | 26 MB |
+| **Total** | **about 729 MB** |
 
 (If your own language isn't English, the list adjusts: your language's model is left out and an English-to-your-language model is added.)
 
 - It uses the open-source [Opus-MT](https://github.com/Helsinki-NLP/Opus-MT) models from the University of Helsinki, run in the browser with [Transformers.js](https://github.com/huggingface/transformers.js). No account, no API key, and **post text never leaves your machine**.
 - It runs on the CPU, so no special graphics card is needed. A post usually translates in under a second.
-- Nothing else is downloaded later. Languages without their own model use the shared one.
+- Languages without their own model use the shared one, so no further models are downloaded later. The models stay on your computer, so translation keeps working offline.
+- **What runs on your computer:** the engine, Transformers.js 4.3.0 and the ONNX Runtime it uses, is downloaded from jsDelivr each time it isn't already in the web view's cache. Its version is fixed, but the files aren't checked against a known fingerprint, so you're trusting jsDelivr and the packages' publishers to serve them unchanged. Each model is fixed to one exact version on Hugging Face, so it can't change after you install it. A future release will ship the engine inside Murmuration instead.
 - Hover over a translated post to see the original.
 - **Uninstall** it from the same panel at any time to free the space. Murmuration keeps working without it.
 
@@ -134,7 +135,8 @@ Murmuration runs unattended, so it leans toward caution:
 - Before a post is shown, it's checked against Bluesky's public moderation labels. Anything labelled, on the post or the account, is skipped.
 - Accounts that asked not to be shown to logged-out viewers are skipped.
 - A post is checked 15 seconds after it's written, giving Bluesky's automatic labellers time to act first.
-- A multilingual word filter (English, European languages, Russian, Japanese, Chinese, Korean) and a list of adult-site domains catch content that hasn't been labelled yet, in the text, in links and in link previews. It also checks translations. It errs on the side of hiding things.
+- A multilingual word filter (English, European languages, Russian, Japanese, Chinese, Korean) and a list of adult-site domains catch content that hasn't been labelled yet, in the text, in links and in link previews. It also checks translations and sees through common disguises (invisible characters, full-width letters, look-alike Cyrillic and Greek letters). It errs on the side of hiding things, but no word list catches everything: abuse and hate speech rely on Bluesky's labels.
+- The language ring and the "how this post was placed" line show only languages Murmuration knows. A post's language tag is set by the poster's app, so an unknown tag is never shown.
 - Nothing is stored: posts live in memory while they're on screen and then they're gone.
 
 **Network connections it makes:**
