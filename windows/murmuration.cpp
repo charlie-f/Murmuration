@@ -32,8 +32,9 @@ const wchar_t kHost[] = L"app.murmuration.local";
 const wchar_t kOrigin[] = L"https://app.murmuration.local/";
 const wchar_t kRepo[] = L"https://github.com/charlie-f/Murmuration";
 const wchar_t kWebView2Download[] = L"https://developer.microsoft.com/microsoft-edge/webview2/";
-// Pages the app may open in the viewer's browser; anything else is ignored
-const wchar_t* const kExternalAllowed[] = { L"https://bsky.app/", kRepo };
+// Pages the app may open in the viewer's browser (the project page itself, or prefixes that
+// end in "/" so a look-alike such as .../MurmurationX can't match); anything else is ignored
+const wchar_t* const kExternalAllowed[] = { L"https://bsky.app/", L"https://github.com/charlie-f/Murmuration/" };
 
 enum class Mode { Screensaver, App, Preview, Config };
 
@@ -217,7 +218,7 @@ void ConfigureWebView() {
             args->put_Handled(TRUE);
             LPWSTR uri = nullptr;
             args->get_Uri(&uri);
-            bool allowed = false;
+            bool allowed = uri && wcscmp(uri, kRepo) == 0;
             if (uri) for (auto prefix : kExternalAllowed) allowed = allowed || StartsWith(uri, prefix);
             if (allowed) {
                 ShellExecuteW(nullptr, L"open", uri, nullptr, nullptr, SW_SHOWNORMAL);

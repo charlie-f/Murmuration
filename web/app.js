@@ -104,8 +104,10 @@ function weightedPick(weights) {
 }
 
 // Parse a BCP-47 tag into { key, region } where key indexes LANGS.
+// The tag is whatever the poster's app sent, so only a well-formed one counts.
+const LANG_TAG_RE = /^[a-z]{2,3}(?:-[a-z0-9]{2,8})*$/i;
 function parseLang(tag) {
-  if (!tag) return null;
+  if (!tag || !LANG_TAG_RE.test(String(tag).replace(/_/g, "-"))) return null;
   const parts = String(tag).toLowerCase().split(/[-_]/);
   let base = LANG_ALIASES[parts[0]] || parts[0];
   const script = parts.slice(1).find((p) => p.length === 4);
@@ -158,18 +160,21 @@ function detectLang(text, taggedKey) {
 // Decide where on the globe a post goes, and how confident we are.
 function locate(langTag, text) {
   let p = parseLang(langTag);
+  // A language the app doesn't know counts as untagged: its code would otherwise reach the
+  // screen (on the ring and in "from language tag …"), and the poster chooses it
+  if (p && !LANGS[p.key]) p = null;
   const detected = text ? detectLang(text, p && p.key) : null;
   if (detected && (!p || (detected !== p.key && !(detected === "zh" && p.key.startsWith("zh"))))) {
     const loc = locate(detected);
     if (!loc) return null;
     const single = Object.keys(LANGS[loc.lang]).length === 1;
     const where = single ? placeName(loc.country) : `${langName(loc.lang)} · spot is a guess`;
-    return { ...loc, why: `${where} · language read from text` + (p ? ` (tagged ${langTag})` : "") };
+    return { ...loc, why: `${where} · language read from text` + (p ? ` (tagged ${langName(p.key)})` : "") };
   }
   if (!p) return null;
   if (p.region && PLACES[p.region]) {
     return { ...spot(p.region), tier: "known", country: p.region, lang: p.key,
-      why: `${placeName(p.region)} · from language tag ${langTag}` };
+      why: `${placeName(p.region)} · from language tag ${p.key.split("-")[0]}-${p.region}` };
   }
   const weights = LANGS[p.key];
   if (!weights) return null;
@@ -544,7 +549,22 @@ const ADULT_RE = new RegExp([
   // Adult stores and sites, in the text or in links
   String.raw`dlsite|fanza|dmm\.co\.jp|onlyfans\.com|fansly|pornhub|xvideos|xhamster|xnxx|chaturbate|stripchat|manyvids|redtube|youporn|spankbang|eporner|missav|erome`,
 ].join("|"), "iu");
-const looksAdult = (s) => !!s && ADULT_RE.test(s);
+// Disguised words: invisible characters, full-width or styled letters, marks stacked on
+// letters, and Cyrillic or Greek letters that look Latin. The text is checked as written
+// (which keeps the Cyrillic words working), with those stripped, and with the look-alikes
+// swapped for Latin letters. Best effort: Bluesky's labels remain the main check.
+const LOOKALIKES = {
+  "а": "a", "в": "b", "е": "e", "к": "k", "м": "m", "н": "h", "о": "o", "р": "p", "с": "c", "т": "t",
+  "у": "y", "х": "x", "і": "i", "ј": "j", "ѕ": "s", "һ": "h", "ԁ": "d",
+  "α": "a", "ε": "e", "ι": "i", "κ": "k", "ν": "v", "ο": "o", "ρ": "p", "τ": "t", "υ": "u", "χ": "x",
+};
+const LOOKALIKE_RE = new RegExp(`[${Object.keys(LOOKALIKES).join("")}]`, "gu");
+function looksAdult(s) {
+  if (!s) return false;
+  const plain = String(s).normalize("NFKC").toLowerCase().replace(/[\p{Cf}\p{M}]/gu, "");
+  return ADULT_RE.test(s) || ADULT_RE.test(plain) ||
+    ADULT_RE.test(plain.replace(LOOKALIKE_RE, (c) => LOOKALIKES[c]));
+}
 
 // Every link a post carries: link facets in the text and a link-preview card
 function postLinks(rec) {
@@ -585,7 +605,7 @@ function postBody(item, box, maxChars) {
   orig.dir = "auto";
   const where = document.createElement("div");
   where.className = "where";
-  where.textContent = item.loc.why;
+  where.textContent = truncate(item.loc.why, 90);
   const trnote = document.createElement("span");
   trnote.className = "trnote";
   where.append(trnote);
@@ -683,7 +703,7 @@ function writePref(key, value) {
   } catch { /* storage unavailable */ }
 }
 
-const ENGINE_MB = 6; // Transformers.js and its runtime
+const ENGINE_MB = 26; // Transformers.js (0.6 MB) and ONNX Runtime, mostly its 25.6 MB WebAssembly core
 const planMB = () => (trPlan || []).reduce((n, m) => n + m.mb, 0) + ENGINE_MB;
 
 function setTrStatus(text, progress) {
@@ -1079,7 +1099,8 @@ function onEvent(m) {
   const tag = Array.isArray(rec.langs) && rec.langs[0];
   const loc = locate(tag, rec.text);
   const bucket = langBuckets[langBuckets.length - 1];
-  const key = loc ? loc.lang : (parseLang(tag)?.key || "und");
+  const tagKey = parseLang(tag)?.key;
+  const key = loc ? loc.lang : (LANGS[tagKey] ? tagKey : "und");  // the ring shows known languages only
   bucket.set(key, (bucket.get(key) || 0) + 1);
   if (!loc) return;
 
