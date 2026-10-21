@@ -13,6 +13,7 @@
 <body class="idle">
 <div id="globe"></div>
 <canvas id="ring"></canvas>
+<div id="focusLine" class="ia-only" hidden><span id="focusText"></span><button id="focusClear" type="button" aria-label="Show all languages">×</button></div>
 <div id="feed" aria-live="off"></div>
 
 <div id="brand" class="hud">
@@ -65,6 +66,7 @@
       <li><b>Open a post on Bluesky:</b> click its card on the globe.</li>
       <li><b>Colours:</b> amber means the location is a guess from the post's language; cyan means a country hint from the handle (.jp, .de) or language tag; pink is your selection.</li>
       <li><b>Keys:</b> <kbd>Space</kbd> pause the spin, <kbd>F</kbd> fullscreen, <kbd>T</kbd> cards on the globe, <kbd>L</kbd> translation on or off (once installed), <kbd>Esc</kbd> close or deselect.</li>
+      <li><b>Follow one language:</b> click its name on the ring around the globe. The globe turns to where it is spoken, and the feed and cards show only that language. Click it again or press <kbd>Esc</kbd> to show all languages again.</li>
       <li><b>Translate posts</b> into your language with the optional Translation extra (toolbar, top right).</li>
     </ul>
     <p class="note">Murmuration goes back to screensaver mode after 2 minutes without any input.</p>
