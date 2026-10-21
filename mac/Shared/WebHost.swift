@@ -10,11 +10,13 @@ enum WebHost {
     static let scheme = "murmuration"
     static let origin = "murmuration://app/"
     static let repo = "https://github.com/charlie-f/Murmuration"
+    static let appID = "com.github.charlie-f.Murmuration"
 
-    /// A web view showing index.html?host=<host> from `webRoot` (the bundled web/ folder).
+    /// A web view showing index.html?host=<host> from `webRoot` (the bundled web/ folder),
+    /// with any extra `query` (already URL-safe) after it.
     /// `persistent` gives the page lasting storage (settings, the translation extra);
     /// without it nothing is written to disk.
-    static func makeWebView(webRoot: URL, host: String, persistent: Bool,
+    static func makeWebView(webRoot: URL, host: String, query: String = "", persistent: Bool,
                             delegate: WebViewDelegate) -> WKWebView {
         let config = WKWebViewConfiguration()
         config.setURLSchemeHandler(BundleSchemeHandler(root: webRoot), forURLScheme: scheme)
@@ -31,7 +33,7 @@ enum WebHost {
         #if DEV
         if #available(macOS 13.3, *) { webView.isInspectable = true }
         #endif
-        webView.load(URLRequest(url: URL(string: "\(origin)index.html?host=\(host)")!))
+        webView.load(URLRequest(url: URL(string: "\(origin)index.html?host=\(host)\(query.isEmpty ? "" : "&" + query)")!))
         return webView
     }
 }

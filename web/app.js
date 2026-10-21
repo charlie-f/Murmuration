@@ -10,6 +10,14 @@ document.getElementById("appVersion").textContent = APP.version;
 // and can ask the wrapper to close
 const HOST = new URLSearchParams(location.search).get("host");
 if (HOST) document.body.classList.add("host-" + HOST);
+// Only the two values the Mac screensaver sends count (never inherited names like "constructor")
+const exploreParam = new URLSearchParams(location.search).get("explore");
+const EXPLORE_ELSEWHERE = exploreParam === "app" ? "To explore, open the Murmuration app"
+  : exploreParam === "install" ? "To explore, install the Murmuration app" : "";
+if (EXPLORE_ELSEWHERE) {
+  document.body.classList.add("explore-" + exploreParam);
+  document.querySelector("#exploreBox .hint-app").textContent = EXPLORE_ELSEWHERE;
+}
 const tellHost = (message) => {
   window.chrome?.webview?.postMessage(message);                       // Windows (WebView2)
   window.webkit?.messageHandlers?.murmuration?.postMessage(message);  // macOS (WKWebView)
@@ -209,6 +217,21 @@ let rotateWanted = true; // what Space last asked for; selection pauses rotation
 controls.autoRotate = true;
 controls.autoRotateSpeed = 0.35;
 controls.enableDamping = true;
+// I1: globe.gl's directional light, moved to where the sun is overhead right now (declination
+// from the day of the year, longitude from UTC time), so the real night side reads as night
+const sun = world.lights().find((l) => l.isDirectionalLight);
+function placeSun() {
+  if (!sun) return;
+  const now = new Date();
+  const day = (now - Date.UTC(now.getUTCFullYear(), 0, 0)) / 864e5;
+  const declination = -23.44 * Math.cos((2 * Math.PI / 365) * (day + 10));
+  const longitude = (12 - now.getUTCHours() - now.getUTCMinutes() / 60) * 15;
+  const { x, y, z } = world.getCoords(declination, longitude, 100);
+  sun.position.set(x, y, z);
+}
+placeSun();
+setInterval(placeSun, 60000);
+
 // Full 2x pixel density costs 4x the fill for little visible gain on a moving globe
 world.renderer().setPixelRatio(Math.min(window.devicePixelRatio || 1, 1.5));
 
@@ -244,7 +267,7 @@ setInterval(() => {
 // ---------------------------------------------------------------------------
 // Stats: posts/sec and a rolling 60-second count per language
 // ---------------------------------------------------------------------------
-let total = 0, placedCount = 0, secCount = 0;
+let total = 0, secCount = 0;
 const ppsWindow = [];
 const langBuckets = [new Map()];
 setInterval(() => {
@@ -255,7 +278,6 @@ setInterval(() => {
   const pps = ppsWindow.reduce((a, b) => a + b, 0) / ppsWindow.length;
   document.getElementById("pps").textContent = pps.toFixed(1);
   document.getElementById("total").textContent = total.toLocaleString();
-  document.getElementById("placed").textContent = total ? Math.round(placedCount / total * 100) + "%" : "0%";
 }, 1000);
 
 function langCounts() {
@@ -283,6 +305,9 @@ function fitAltitude() {
   const theta = Math.atan((avail / (h / 2)) * Math.tan(fov / 2));
   return Math.max(1.3, Math.min(4, 1 / Math.sin(theta) - 1));
 }
+function fitFeedBottom() {
+  feedEl.style.bottom = document.getElementById("legend").offsetHeight + 30 + "px";
+}
 function layout() {
   const side = innerWidth >= 700 ? Math.min(340, Math.round(innerWidth * 0.3)) : 0;
   const w = innerWidth - side, h = innerHeight;
@@ -290,7 +315,7 @@ function layout() {
   feedEl.style.width = side - 28 + "px";
   const brand = document.getElementById("brand"), legend = document.getElementById("legend");
   feedEl.style.top = brand.offsetTop + brand.offsetHeight + 14 + "px";
-  feedEl.style.bottom = legend.offsetHeight + 30 + "px";
+  fitFeedBottom();
   globeEl.style.left = side + "px";
   world.width(w).height(h);
   const dpr = window.devicePixelRatio || 1;
@@ -308,8 +333,9 @@ layout();
 
 function rerankRing() {
   const counts = [...langCounts()].filter(([k]) => k !== "und").sort((a, b) => b[1] - a[1]).slice(0, 12);
-  const prev = new Map(ringSlots.map((s) => [s.key, s.shown]));
-  ringSlots = counts.map(([key, n]) => ({ key, label: langName(key), target: n, shown: prev.get(key) || 0 }));
+  const prev = new Map(ringSlots.map((s) => [s.key, s]));
+  ringSlots = counts.map(([key, n]) => ({ key, label: langName(key), target: n, shown: prev.get(key)?.shown || 0,
+    pulseAt: prev.get(key)?.pulseAt || 0, glow: 0 }));
   ringDirty = true;
 }
 setInterval(rerankRing, 5000);
@@ -322,9 +348,48 @@ function globeScreenRadius() {
   return (world.height() / 2) * Math.tan(theta) / Math.tan(fov / 2);
 }
 
-function drawRing() {
+// I3: a new card brightens its language's bar: a quick rise, then a slow ease out
+const PULSE_MS = 1600;
+function pulseRing(key) {
+  const s = ringSlots.find((x) => x.key === key);
+  const now = performance.now();
+  if (!s || now - s.pulseAt < 5000) return;  // the same bar at most every 5 s
+  s.pulseAt = now;
+}
+function glowAt(s, now) {
+  const t = (now - s.pulseAt) / PULSE_MS;
+  if (!(t >= 0 && t < 1)) return 0;
+  return t < 0.12 ? t / 0.12 : (1 - (t - 0.12) / 0.88) ** 2;
+}
+
+// I4: in screensaver mode the view nods gently south and back (+35 to -25 latitude over
+// about four minutes), so the southern hemisphere gets its turn
+const reducedMotion = matchMedia("(prefers-reduced-motion: reduce)");
+const NOD_MS = 240000;
+let nodding = false;
+function nod(now) {
+  if (interactive || reducedMotion.matches) { stopNod(); return; }
+  const lat = 5 + 30 * Math.sin((now / NOD_MS) * 2 * Math.PI);
+  const target = (90 - lat) * Math.PI / 180;      // the controls measure from the north pole
+  const current = controls.getPolarAngle();
+  controls.minPolarAngle = controls.maxPolarAngle = current + (target - current) * 0.02;
+  nodding = true;
+}
+function stopNod() {
+  if (!nodding) return;
+  controls.minPolarAngle = 0;
+  controls.maxPolarAngle = Math.PI;
+  nodding = false;
+}
+
+function drawRing(now) {
   requestAnimationFrame(drawRing);
+  nod(now);
   let moved = false;
+  for (const s of ringSlots) {
+    const glow = glowAt(s, now);
+    if (glow !== s.glow) { s.glow = glow; moved = true; }
+  }
   for (const s of ringSlots) {
     const d = s.target - s.shown;
     if (!d) continue;
@@ -355,14 +420,15 @@ function drawRing() {
     const x1 = cx + Math.cos(a) * (r + 4 + len), y1 = cy + Math.sin(a) * (r + 4 + len);
     const grad = ctx.createLinearGradient(x0, y0, x1, y1);
     grad.addColorStop(0, `rgba(${AMBER},.15)`); grad.addColorStop(1, `rgba(${AMBER},.95)`);
-    ctx.strokeStyle = grad; ctx.lineWidth = 5; ctx.lineCap = "round";
+    if (s.glow) grad.addColorStop(1, `rgba(255,${180 + Math.round(60 * s.glow)},${84 + Math.round(120 * s.glow)},1)`);
+    ctx.strokeStyle = grad; ctx.lineWidth = 5 + 2 * s.glow; ctx.lineCap = "round";
     ctx.beginPath(); ctx.moveTo(x0, y0); ctx.lineTo(x1, y1); ctx.stroke();
 
     const lx = cx + Math.cos(a) * (r + 12 + len), ly = cy + Math.sin(a) * (r + 12 + len);
     const right = Math.cos(a) >= -0.01;
     ctx.textAlign = Math.abs(Math.cos(a)) < 0.2 ? "center" : right ? "left" : "right";
     ctx.textBaseline = Math.sin(a) < -0.8 ? "bottom" : Math.sin(a) > 0.8 ? "top" : "middle";
-    ctx.fillStyle = "rgba(232,238,247,.9)";
+    ctx.fillStyle = `rgba(232,238,247,${(0.9 + 0.1 * s.glow).toFixed(2)})`;
     ctx.fillText(s.label, lx, ly);
     ctx.fillStyle = "rgba(138,150,168,.9)";
     const dy = ctx.textBaseline === "bottom" ? -13 : 13;
@@ -513,11 +579,23 @@ let feedHover = false, nextFeedAt = 0;
 feedEl.addEventListener("mouseenter", () => { feedHover = true; });
 feedEl.addEventListener("mouseleave", () => { feedHover = false; });
 
+// I5: resting the pointer on a feed entry sends one pink ripple from its spot, if it's in view
+let hoverTimer = null;
+function hoverLocate(item) {
+  clearTimeout(hoverTimer);
+  hoverTimer = setTimeout(() => {
+    if (!interactive || angDist(item.loc, world.pointOfView()) >= 80) return;
+    pendingRings.push({ lat: item.loc.lat, lng: item.loc.lng, rgb: PINK, maxR: 4, speed: 3.5, t: performance.now() });
+  }, 150);
+}
+
 function addToFeed(item) {
   const el = document.createElement("div");
   el.className = "fitem " + item.loc.tier;
   postBody(item, el, 180);
   el.addEventListener("click", () => select(item));
+  el.addEventListener("mouseenter", () => hoverLocate(item));
+  el.addEventListener("mouseleave", () => clearTimeout(hoverTimer));
   item.feedEl = el;
   // Follow new posts unless the viewer has scrolled up to read older ones
   const atBottom = feedEl.scrollHeight - feedEl.scrollTop - feedEl.clientHeight < 40;
@@ -868,6 +946,7 @@ setInterval(() => {
       item.el = makeCard(item);
       item.shownAt = now;
       cards.push(item);
+      pulseRing(item.loc.lang);
       changed = true;
     }
   }
@@ -895,7 +974,7 @@ function connect() {
   sock.onopen = () => {
     if (ws !== sock) return;
     retryMs = 1000; lastMessageAt = performance.now();
-    connEl.className = "on"; connText.textContent = host;
+    connEl.className = "on"; connText.textContent = "live";
   };
   sock.onmessage = (ev) => {
     if (ws !== sock) return;
@@ -963,7 +1042,6 @@ function onEvent(m) {
   const key = loc ? loc.lang : (parseLang(tag)?.key || "und");
   bucket.set(key, (bucket.get(key) || 0) + 1);
   if (!loc) return;
-  placedCount++;
 
   const rgb = loc.tier === "known" ? CYAN : AMBER;
   const t = performance.now();
@@ -988,7 +1066,9 @@ const IA_TIMEOUT = 120000; // back to screensaver after 2 minutes without input
 function setInteractive(on) {
   interactive = on;
   document.body.classList.toggle("interactive", on);
+  fitFeedBottom();
   if (on) {
+    stopNod();
     if (readPref("murmuration.helpSeen", "") !== "yes") {
       openPanel("help");
       writePref("murmuration.helpSeen", "yes");
@@ -1017,7 +1097,8 @@ document.getElementById("btnQuit").addEventListener("click", () => tellHost("exi
 // ---------------------------------------------------------------------------
 window.addEventListener("keydown", (e) => {
   bumpActivity();
-  if (HOST === "screensaver" && !interactive && overlay.hidden && e.key !== "e" && e.key !== "E") {
+  const isE = (e.key === "e" || e.key === "E") && !EXPLORE_ELSEWHERE;
+  if (HOST === "screensaver" && !interactive && overlay.hidden && !isE) {
     tellHost("exit");
     return;
   }
@@ -1044,10 +1125,16 @@ window.addEventListener("keydown", (e) => {
     } else if (interactive) {
       openPanel("extras");
     }
-  } else if (e.key === "e" || e.key === "E") {
+  } else if (isE) {
     if (!interactive) setInteractive(true);
+  } else if (!interactive && HOST !== "screensaver" && isPlainKey(e)) {
+    setInteractive(true);  // the app and the browser: any key with no other job explores
   }
 });
+// A key someone presses to do something, not a modifier, shortcut or system key
+function isPlainKey(e) {
+  return !e.ctrlKey && !e.metaKey && !e.altKey && !/^(Shift|Control|Alt|Meta|Tab|CapsLock|F\d+)$/.test(e.key);
+}
 let idleTimer;
 function wake() {
   document.body.classList.remove("idle");
@@ -1056,12 +1143,13 @@ function wake() {
   bumpActivity();
 }
 window.addEventListener("mousedown", (e) => {
-  if (HOST === "screensaver" && !interactive && !e.target.closest("#explore")) tellHost("exit");
+  if (interactive || !overlay.hidden) return;
+  if (HOST === "screensaver") { if (!e.target.closest("#explore")) tellHost("exit"); }
+  else setInteractive(true);
 });
 for (const ev of ["mousemove", "mousedown", "wheel", "touchstart"]) {
   window.addEventListener(ev, wake, { passive: true });
 }
-wake();
 
 // The app (not the screensaver) opens ready to explore
 if (HOST === "app") setInteractive(true);

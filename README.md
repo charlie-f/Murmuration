@@ -50,7 +50,7 @@ Needs macOS 13 or later and Xcode (or just the Command Line Tools: `xcode-select
 2. Double-click `Murmuration.saver` and choose to install it. It appears in **System Settings → Screen Saver**.
 3. Drag `Murmuration.app` into **Applications**.
 
-macOS closes a screensaver as soon as you touch the mouse or keyboard, so on a Mac the screensaver is for watching only, and exploring (spinning the globe, reading earlier posts, the Translation extra) happens in **Murmuration.app**. The screensaver's **Options…** button opens the app. To save power, only the main display runs the live globe; other displays show a still picture.
+macOS closes a screensaver as soon as you touch the mouse or keyboard, so on a Mac the screensaver is for watching only, and exploring (spinning the globe, reading earlier posts, the Translation extra) happens in **Murmuration.app**. The screensaver says so at the bottom of the screen: "To explore, open the Murmuration app" (or "To explore, install the Murmuration app" if it isn't installed yet). The screensaver's **Options…** button opens the app. To save power, only the main display runs the live globe; other displays show a still picture.
 
 The translation extra lives in the app. The screensaver shows posts untranslated and keeps nothing on disk. To remove the app's saved settings and the translation extra, use **Uninstall** in its Translation panel, or delete the `com.github.charlie-f.Murmuration` folders in `~/Library/WebKit` and `~/Library/Caches`.
 
@@ -64,7 +64,9 @@ For development, `mac/build.sh dev` builds with the Web Inspector enabled and op
 
 Murmuration has two modes.
 
-**Screensaver mode** (the default) is for watching. The globe turns on its own and posts flow in. Move the mouse and an **Explore** button appears for a few seconds (or press **E**).
+**Screensaver mode** (the default) is for watching. The globe turns on its own, nodding south now and then, lit by the sun where it's day right now, and posts flow in.
+
+**Press E to explore** (on a Mac, open the Murmuration app). A quiet "E explore" at the bottom of the screen is the reminder; move the mouse and it becomes an **Explore** button. In the app and in a browser, any click or key with no other job starts exploring too. In the Windows screensaver, any other key or a click elsewhere closes it, as screensavers do.
 
 **Interactive mode** lets you explore:
 
@@ -72,6 +74,7 @@ Murmuration has two modes.
 |---|---|
 | Spin the globe | Drag it |
 | Zoom | Scroll wheel or pinch |
+| See where a post is | Rest the pointer on it in the feed; a pink ripple goes out from its spot |
 | Find a post on the globe | Click it in the feed on the left; the globe turns to it and marks it in pink |
 | Let go of a selected post | Click it again, or press **Esc** |
 | Read earlier posts | Scroll the feed (new posts wait while your pointer is over it) |

@@ -46,8 +46,12 @@ final class MurmurationSaverView: ScreenSaverView {
               let web = Bundle(for: Self.self).resourceURL?.appendingPathComponent("web") else { return }
         if let live = Self.live, live.serial > serial { return }
         Self.live?.tearDown()
+        // The screensaver can't react to input (macOS closes it first), so the page points to
+        // the app instead. Checked each time, so an app installed later is noticed.
+        let explore = NSWorkspace.shared.urlForApplication(withBundleIdentifier: WebHost.appID) != nil ? "app" : "install"
         // Each display and the app keep separate storage anyway; the screensaver needs none
-        let view = WebHost.makeWebView(webRoot: web, host: "screensaver", persistent: false, delegate: delegate)
+        let view = WebHost.makeWebView(webRoot: web, host: "screensaver", query: "explore=" + explore,
+                                       persistent: false, delegate: delegate)
         // macOS hosts the screensaver in a window it reports as covered, and WebKit stops
         // drawing covered pages. This WebKit setting isn't public, so it's skipped if it's gone.
         // If the screensaver goes blank again, look for "window occluded 1" in the WebKit log.
@@ -104,8 +108,6 @@ final class MurmurationSaverView: ScreenSaverView {
 
 /// Options: what the screensaver does, and a way into the app (like the Windows settings dialog)
 private final class SettingsSheet: NSObject {
-    private static let appID = "com.github.charlie-f.Murmuration"
-
     lazy var window: NSWindow = {
         let w = NSPanel(contentRect: NSRect(x: 0, y: 0, width: 420, height: 230), styleMask: [.titled], backing: .buffered, defer: true)
         let title = NSTextField(labelWithString: "Murmuration screensaver")
@@ -138,7 +140,7 @@ private final class SettingsSheet: NSObject {
     }()
 
     @objc private func openApp() {
-        if let url = NSWorkspace.shared.urlForApplication(withBundleIdentifier: Self.appID) {
+        if let url = NSWorkspace.shared.urlForApplication(withBundleIdentifier: WebHost.appID) {
             NSWorkspace.shared.openApplication(at: url, configuration: NSWorkspace.OpenConfiguration())
             closeSheet()
         } else {

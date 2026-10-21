@@ -10,7 +10,7 @@
 <title>Murmuration</title>
 <link rel="stylesheet" href="app.css">
 </head>
-<body>
+<body class="idle">
 <div id="globe"></div>
 <canvas id="ring"></canvas>
 <div id="feed" aria-live="off"></div>
@@ -20,13 +20,13 @@
   <div class="sub">Bluesky, live, as it's posted</div>
   <div id="stats">
     <div><b id="pps">0</b> <span class="k">posts / sec</span></div>
-    <div><span id="total">0</span> <span class="k">posts seen</span> · <span id="placed">0%</span> <span class="k">placed</span></div>
+    <div><span id="total">0</span> <span class="k">posts seen</span></div>
   </div>
   <div id="conn"><span class="dot"></span><span id="connText">connecting…</span></div>
   <div id="trStatus"></div>
 </div>
 
-<div id="legend" class="hud fade-idle">
+<div id="legend" class="hud ia-only">
   <div><span class="sw guess"></span>Location guessed from the post's language</div>
   <div><span class="sw known"></span>Country from handle domain (.jp, .de…) or regional language tag (en-GB)</div>
   <div class="ia-only"><span class="sw sel"></span>Your selection</div>
@@ -38,9 +38,15 @@
   <span id="trKey" hidden><kbd>L</kbd> translation <span id="trState">on</span></span> <kbd>Esc</kbd> deselect
 </div>
 
+<!-- One slot, bottom centre. Idle: a quiet "E explore". Mouse moved: the Explore button.
+     Mac screensaver: where to explore instead (macOS closes screensavers on any input). -->
 <div id="exploreBox" class="ss-only">
-  <button id="explore" class="btn primary" type="button">Explore</button>
-  <div class="host-ss">Press any key or click anywhere else to close</div>
+  <div class="hint-idle"><kbd>E</kbd> explore</div>
+  <div class="hint-awake">
+    <button id="explore" class="btn primary" type="button">Explore</button>
+    <div class="host-ss">Press any key or click anywhere else to close</div>
+  </div>
+  <div class="hint-app"></div>
 </div>
 <div id="toolbar" class="ia-only">
   <button id="btnExtras" class="btn" type="button">Translation</button>
